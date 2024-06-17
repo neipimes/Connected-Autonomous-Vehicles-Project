@@ -502,12 +502,12 @@ class CAV_imus:
             avgLR = 0
 
         # Apply high pass filter to FB and LR values
-        if self.fbHPF[0] < avgFB < self.fbHPF[1]:
+        if self.fbHPF[0] < avgFB - self.fbBias < self.fbHPF[1]:
             avgFB = 0
         else:
             avgFB = avgFB - self.fbBias
 
-        if self.lrHPF[0] < avgLR < self.lrHPF[1]:
+        if self.lrHPF[0] < avgLR - self.lrBias < self.lrHPF[1]:
             avgLR = 0
         else:
             avgLR = avgLR - self.lrBias

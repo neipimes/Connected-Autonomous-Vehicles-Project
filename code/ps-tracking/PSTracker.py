@@ -88,7 +88,7 @@ class PSTracker:
         self._logger.info(f"PSTracker initialized with swarmSize={swarmSize}, w_xy={w_xy}, c1_xy={c1_xy}, c2_xy={c2_xy}, w_angle={w_angle}, c1_angle={c1_angle}, c2_angle={c2_angle}, sections={sections}, targetTime={targetTime}.")
 
     @staticmethod
-    def runIMUReadings(imuC, xLocation, yLocation, angle, psoUpdate, mutex, debug=True):
+    def runIMUReadings(imuC: imus, xLocation, yLocation, angle, psoUpdate, mutex, debug=True):
         """
         Continuously read IMU data and return the latest readings.
         This method runs in a separate process to avoid blocking the main thread.
@@ -148,10 +148,13 @@ class PSTracker:
                         yDisplacement = yLocation.value
                         angleValue = angle.value
 
+                        priorXVelocity = xVelocity
+                        priorYVelocity = yVelocity
+
                         # Recalculate velocities based on change in displacement if previous values exist
                         if preXDisplacement is not None and preYDisplacement is not None and psoTimestep is not None and psoTimestep > 0:
-                            xVelocity = (xDisplacement - preXDisplacement) / psoTimestep
-                            yVelocity = (yDisplacement - preYDisplacement) / psoTimestep
+                            xVelocity = ((xDisplacement - preXDisplacement) / psoTimestep)*0.5 + priorXVelocity*0.5
+                            yVelocity = ((yDisplacement - preYDisplacement) / psoTimestep)*0.5 + priorYVelocity*0.5
                         else:
                             xVelocity = 0.0
                             yVelocity = 0.0
@@ -251,8 +254,8 @@ class PSTracker:
         try:
             scan_iterator = lidar.iter_scans(max_buf_meas=3000, scan_type='normal')
 
-            # Drop the first 10 scans to ensure stable data
-            for _ in range(10):
+            # Drop the first 5 scans to ensure stable data
+            for _ in range(5):
                 next(scan_iterator)
                 print("Dropped scan")
                 sys.stdout.flush()
@@ -469,6 +472,7 @@ def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = Fa
 
         calibrateChoice = input("Calibrate individual IMUs? (y/N): ").strip().lower()
         if calibrateChoice == 'y':
+            print("Running individual IMU calibration for 50 samples. Please keep the car stationary.")
             tracker.imuC.calibrateAll(50)
             logging.info("IMUs calibrated successfully.")
         elif calibrateChoice == 'n' or calibrateChoice == '':
@@ -479,6 +483,7 @@ def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = Fa
 
         calibrateChoice2 = input("Calibrate High Pass Filter and general Gyroscope bias? (y/N): ").strip().lower()
         if calibrateChoice2 == 'y':
+            print("Running HPF and Gyro bias calibration for 30 seconds. Please keep the car stationary.")
             tracker.imuC.calibrateHPFBias(30)
             logging.info("HPF and Gyro bias calibrated successfully.")
         elif calibrateChoice2 == 'n' or calibrateChoice2 == '':
