@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 #import matplotlib
 #matplotlib.use("QtAgg")
-#from matplotlib import pyplot as ply
+from matplotlib import pyplot as plt
 from shapely.geometry import Polygon
 #import geopandas as gpd
 #from adaption import *
@@ -277,9 +277,10 @@ def writeToCSV():
     #load model
     model = torch.hub.load('yolov5', 'custom', source='local', path = model_name, force_reload = True)
     
-    #videoPath = "Videos/Cropped-0.mp4"
-    videoPath = "http://172.25.0.46:9001/camera.cgi" #remoting via vpn 
-    outputDir = 'outputFrames'
+    videoPath = "Videos/Cropped-0.mp4"
+    #videoPath = "http://172.25.0.46:9001/camera.cgi" #remoting via vpn 
+    #videoPath = "http://127.0.0.1:9001/camera.cgi"
+    #outputDir = 'outputFrames'
     firstFrame = True
     #Opening with openCV
     capture = cv2.VideoCapture(videoPath)
@@ -287,42 +288,44 @@ def writeToCSV():
     leftLane = []
     rightLane = []
     #Processing each frame
-    while capture.isOpened():
-        #used chatgpt as a reference
-        ret, frame = capture.read()
-        if firstFrame:
-            midX = int((frame.shape[1])/2)
-            firstFrame = False
-            laneCenter = midX
-            scale = calcScale(midX)
-        if not ret:
-            break
-        #Convert each frame into RBG
-        rFrame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = model(rFrame)
-        results.print() #prints to terminal (optional)
-        #results.save() #saves the image to an exp file (optional)
-        #results.xyxy[0]  # im redictions (tensor) 
-    
-        df = pd.DataFrame(results.pandas().xyxy[0].sort_values("ymin")) #df = Data Frame, sorts x values left to right (not a perfect solution)
-        df = df.reset_index() # make sure indexes pair with number of rows
-        df.iterrows()
-        polygonList = usingCSVData(df)
-        polygonList = sortByDist(polygonList, scale)#is neccessary
-        margin = marginOfError(scale, laneCenter, midX)
-        leftLane, rightLane = splitLaneByImg(polygonList, margin, scale)
-        #print(polygonList, leftLane, rightLane)
-        #print(scale)
-        leftExist, rightExist, leftLane, rightLane = doesLeftOrRightExist(leftLane, rightLane, scale)
-        #print("Left: ", leftExist, "  ", leftLane, "\nRight: ", rightExist, "  ", rightLane)
-        laneCenter = findLaneCenter(leftLane, rightLane, 1000 * scale, midX, leftExist, rightExist, laneCenter)
-        #print(laneCenter)
-        newFrame = overlayimage(scale, leftLane, rightLane, laneCenter, frame)
-        cv2.imshow("Final", newFrame)
-        if cv2.waitKey(1) == ord('q'):#diplays the image for a set amount of time 
-            break
-        frame_count += 1
-
+    try:
+        while capture.isOpened():
+            #used chatgpt as a reference
+            ret, frame = capture.read()
+            if firstFrame:
+                midX = int((frame.shape[1])/2)
+                firstFrame = False
+                laneCenter = midX
+                scale = calcScale(midX)
+            if not ret:
+                break
+            #Convert each frame into RBG
+            rFrame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = model(rFrame)
+            results.print() #prints to terminal (optional)
+            #results.save() #saves the image to an exp file (optional)
+            #results.xyxy[0]  # im redictions (tensor) 
+        
+            df = pd.DataFrame(results.pandas().xyxy[0].sort_values("ymin")) #df = Data Frame, sorts x values left to right (not a perfect solution)
+            df = df.reset_index() # make sure indexes pair with number of rows
+            df.iterrows()
+            polygonList = usingCSVData(df)
+            polygonList = sortByDist(polygonList, scale)#is neccessary
+            margin = marginOfError(scale, laneCenter, midX)
+            leftLane, rightLane = splitLaneByImg(polygonList, margin, scale)
+            #print(polygonList, leftLane, rightLane)
+            #print(scale)
+            leftExist, rightExist, leftLane, rightLane = doesLeftOrRightExist(leftLane, rightLane, scale)
+            #print("Left: ", leftExist, "  ", leftLane, "\nRight: ", rightExist, "  ", rightLane)
+            laneCenter = findLaneCenter(leftLane, rightLane, 1000 * scale, midX, leftExist, rightExist, laneCenter)
+            #print(laneCenter)
+            newFrame = overlayimage(scale, leftLane, rightLane, laneCenter, frame)
+            cv2.imshow("Final", newFrame)
+            if cv2.waitKey(1) == ord('q'):#diplays the image for a set amount of time 
+                break
+            frame_count += 1
+    except KeyboardInterrupt:
+        pass
     #Close
     capture.release()
     cv2.destroyAllWindows()

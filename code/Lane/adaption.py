@@ -61,7 +61,7 @@ def selfDrvieAdapt():
     #load model
     model = torch.hub.load('yolov5', 'custom', source='local', path = model_name, force_reload = True)
     
-    videoPath = "0"
+    videoPath = "/dev/video0"
     #videoPath = "http://172.25.0.46:9001/camera.cgi" #remoting via vpn 
     outputDir = 'outputFrames'
     firstFrame = True
@@ -71,65 +71,69 @@ def selfDrvieAdapt():
     leftLane = []
     rightLane = []
     #Processing each frame
-    while capture.isOpened():
-        #used chatgpt as a reference
-        ret, frame = capture.read()
-        if firstFrame:
-            midX = int((frame.shape[1])/2)
-            firstFrame = False
-            laneCenter = midX
-            scale = calcScale(midX)
-        if not ret:
-            break
-        #Convert each frame into RBG
-        rFrame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = model(rFrame)
-        results.print() #prints to terminal (optional)
-        #results.save() #saves the image to an exp file (optional)
-        #results.xyxy[0]  # im redictions (tensor) 
-    
-        df = pd.DataFrame(results.pandas().xyxy[0].sort_values("ymin")) #df = Data Frame, sorts x values left to right (not a perfect solution)
-        df = df.reset_index() # make sure indexes pair with number of rows
-        df.iterrows()
-        polygonList = usingCSVData(df)
-        polygonList = sortByDist(polygonList, scale) #is necessary
-        margin = marginOfError(scale, laneCenter, midX)
-        leftLane, rightLane = splitLaneByImg(polygonList, margin, scale)
-        #print(polygonList, leftLane, rightLane)
-        #print(scale)
-        leftExist, rightExist, leftLane, rightLane = doesLeftOrRightExist(leftLane, rightLane, scale)
-        laneCenter = findLaneCenter(leftLane, rightLane, 1000 * scale, midX, leftExist, rightExist, laneCenter)
-        #print(laneCenter)
-        newFrame = overlayimage(scale, leftLane, rightLane, laneCenter, frame)
-        cv2.imshow("Final", newFrame)
-        if cv2.waitKey(1) == ord('q'):#diplays the image for a set amount of time 
-            break
+    try:
+        while capture.isOpened():
+            #used chatgpt as a reference
+            ret, frame = capture.read()
+            if firstFrame:
+                midX = int((frame.shape[1])/2)
+                firstFrame = False
+                laneCenter = midX
+                scale = calcScale(midX)
+            if not ret:
+                break
+            #Convert each frame into RBG
+            rFrame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = model(rFrame)
+            results.print() #prints to terminal (optional)
+            #results.save() #saves the image to an exp file (optional)
+            #results.xyxy[0]  # im redictions (tensor) 
+        
+            df = pd.DataFrame(results.pandas().xyxy[0].sort_values("ymin")) #df = Data Frame, sorts x values left to right (not a perfect solution)
+            df = df.reset_index() # make sure indexes pair with number of rows
+            df.iterrows()
+            polygonList = usingCSVData(df)
+            polygonList = sortByDist(polygonList, scale) #is necessary
+            margin = marginOfError(scale, laneCenter, midX)
+            leftLane, rightLane = splitLaneByImg(polygonList, margin, scale)
+            #print(polygonList, leftLane, rightLane)
+            #print(scale)
+            leftExist, rightExist, leftLane, rightLane = doesLeftOrRightExist(leftLane, rightLane, scale)
+            laneCenter = findLaneCenter(leftLane, rightLane, 1000 * scale, midX, leftExist, rightExist, laneCenter)
+            #print(laneCenter)
+            newFrame = overlayimage(scale, leftLane, rightLane, laneCenter, frame)
+            cv2.imshow("Final", newFrame)
+            if cv2.waitKey(1) == ord('q'):#diplays the image for a set amount of time 
+                break
 
-        if frame_count % 7 == 0:
-            
-            if frame_count > 10:
-                error = midX - laneCenter
-                steering_adjustment = pid.update(error, 0.1/frame_rate)
-                angle = 90 + (steering_adjustment * (-0.5)) 
-                if leftExist or rightExist:
-                    command = 'F'
-                    print("Forward Sent")
-                    send_data(command)
-                else:
-                    command = 'S'
-                    print("stop Sent")
-                    send_data(command)
-                clip_angle = max(30, min(160, angle))
-                if 30 <= clip_angle <= 160:
-                    duty_cycle = angleToDutyCycle(clip_angle)
-                    print(f'duty cycle: {duty_cycle}, clipped angle: {clip_angle}')
-                    pwm.ChangeDutyCycle(duty_cycle)
-                else:
-                    duty_cycle = angleToDutyCycle(90.01)
-                    pwm.ChangeDutyCycle(duty_cycle)
-        frame_count += 1
-
+            if frame_count % 7 == 0:
+                
+                if frame_count > 10:
+                    error = midX - laneCenter
+                    steering_adjustment = pid.update(error, 0.1/frame_rate)
+                    angle = 90 + (steering_adjustment * (-0.5)) 
+                    if leftExist or rightExist:
+                        command = 'F'
+                        print("Forward Sent")
+                        send_data(command)
+                    else:
+                        command = 'S'
+                        print("stop Sent")
+                        send_data(command)
+                        
+                    clip_angle = max(30, min(160, angle))
+                    if 30 <= clip_angle <= 160:
+                        duty_cycle = angleToDutyCycle(clip_angle)
+                        print(f'duty cycle: {duty_cycle}, clipped angle: {clip_angle}')
+                        pwm.ChangeDutyCycle(duty_cycle)
+                    else:
+                        duty_cycle = angleToDutyCycle(90.01)
+                        pwm.ChangeDutyCycle(duty_cycle)
+            frame_count += 1
+    except KeyboardInterrupt:
+        pass
     #Close
+    send_data('S')
     capture.release()
     cv2.destroyAllWindows()
     pwm.stop()
