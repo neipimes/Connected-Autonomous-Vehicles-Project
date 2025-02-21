@@ -9,6 +9,17 @@ from nicegui import ui
 
 ui.colors()
 
+@ui.page("/motorDisrupt")
+def motorDistrupt():
+    ui.add_head_html('<style>body {background-color: #202020; }</style>')
+    with ui.column().classes("w-full items-center"):
+        with ui.row(align_items="center"):
+            ui.label("CAV Attack Panel").style('font-size: 54px; font-weight: bold; color: #ffffff;')
+        with ui.row().style('padding-top: 0px;').classes('w-full justify-center'):
+            with ui.column(align_items="center").classes("col"):
+               ui.label("Selected Attack: Motor Disruption").style('font-size: 42px; font-weight: bold; color: #ffffff;') 
+               
+
 ui.add_head_html('<style>body {background-color: #202020; }</style>')
 
 with ui.column().classes("w-full items-center"):
