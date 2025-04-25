@@ -9,6 +9,8 @@
 from mpu9250_jmdev.mpu_9250 import MPU9250
 from mpu9250_jmdev.registers import *
 
+# TODO: Add a method for configuring setup with a config file.
+
 class CAV_imus:
     imu1 = MPU9250(address_ak=None, 
         address_mpu_master=MPU9050_ADDRESS_68, 
