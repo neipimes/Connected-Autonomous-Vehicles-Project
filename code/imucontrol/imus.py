@@ -71,3 +71,7 @@ class CAV_imus:
                 for i in range(0, 3):
                     avgABias[i] /= numOfSamples
                     avgGBias[i] /= numOfSamples
+            
+                imu.abias = avgABias
+                imu.gbias = avgGBias
+                imu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
