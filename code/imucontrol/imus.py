@@ -87,22 +87,30 @@ class CAV_imus:
                     aBiasSamples = np.array(aBiasSamples)
                     gBiasSamples = np.array(gBiasSamples)
 
-                    # Calculate the middle 99% range
-                    aBiasFiltered = np.percentile(aBiasSamples, [0.5, 99.5], axis=0)
-                    gBiasFiltered = np.percentile(gBiasSamples, [0.5, 99.5], axis=0)
+                    # Calculate the middle 99% range for each axis
+                    avgABias = []
+                    avgGBias = []
+                    aBiasNoise = []
+                    gBiasNoise = []
 
-                    # Average the middle 99% values
-                    avgABias = np.mean(aBiasSamples[(aBiasSamples >= aBiasFiltered[0]) & (aBiasSamples <= aBiasFiltered[1])], axis=0)
-                    avgGBias = np.mean(gBiasSamples[(gBiasSamples >= gBiasFiltered[0]) & (gBiasSamples <= gBiasFiltered[1])], axis=0)
+                    for axis in range(3):  # Iterate over x, y, z axes
+                        aBiasFiltered = np.percentile(aBiasSamples[:, axis], [0.5, 99.5])
+                        gBiasFiltered = np.percentile(gBiasSamples[:, axis], [0.5, 99.5])
 
-                    # Calculate bias noise
-                    aBiasSorted = np.sort(aBiasSamples, axis=0)
-                    gBiasSorted = np.sort(gBiasSamples, axis=0)
-                    aBiasNoise = np.max(np.abs((aBiasSorted[[0, -1]] - avgABias) / avgABias), axis=0).tolist()
-                    gBiasNoise = np.max(np.abs((gBiasSorted[[0, -1]] - avgGBias) / avgGBias), axis=0).tolist()
+                        # Average the middle 99% values for this axis
+                        avgABias.append(np.mean(aBiasSamples[(aBiasSamples[:, axis] >= aBiasFiltered[0]) & 
+                                                              (aBiasSamples[:, axis] <= aBiasFiltered[1]), axis]))
+                        avgGBias.append(np.mean(gBiasSamples[(gBiasSamples[:, axis] >= gBiasFiltered[0]) & 
+                                                              (gBiasSamples[:, axis] <= gBiasFiltered[1]), axis]))
 
-                    imu.abias = avgABias.tolist()
-                    imu.gbias = avgGBias.tolist()
+                        # Calculate bias noise for this axis
+                        aBiasSorted = np.sort(aBiasSamples[:, axis])
+                        gBiasSorted = np.sort(gBiasSamples[:, axis])
+                        aBiasNoise.append(np.max(np.abs((aBiasSorted[[0, -1]] - avgABias[-1]) / avgABias[-1])))
+                        gBiasNoise.append(np.max(np.abs((gBiasSorted[[0, -1]] - avgGBias[-1]) / avgGBias[-1])))
+
+                    imu.abias = avgABias
+                    imu.gbias = avgGBias
                     imu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
                     CAV_imus.logIMUConfiguration(
                         f"IMU{CAV_imus.imuList.index(imu) + 1}",
@@ -111,7 +119,7 @@ class CAV_imus:
                         abias=imu.abias,
                         gbias=imu.gbias
                     )
-                    bias_data.append((avgABias.tolist(), avgGBias.tolist()))
+                    bias_data.append((avgABias, avgGBias))
                     CAV_imus.imuNoises.append((aBiasNoise, gBiasNoise))
                 else:
                     # If IMU is None, append zeros
