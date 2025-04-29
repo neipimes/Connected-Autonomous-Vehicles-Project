@@ -58,7 +58,7 @@ class CAV_imus:
     imuAliases = {"Front": imu1, "Back": imu5, "Left": imu3, "Right": imu4}
     imuNoises = []
 
-    def logIMUConfiguration(self, imu_name, gfs=None, afs=None, abias=None, gbias=None):
+    def logIMUConfiguration(imu_name, gfs=None, afs=None, abias=None, gbias=None):
         log_message = f"{imu_name} configuration updated:"
         if gfs is not None and afs is not None:
             log_message += f" GFS: {gfs}, AFS: {afs};"
@@ -68,7 +68,7 @@ class CAV_imus:
             log_message += f" Gyroscope Bias: {gbias};"
         logging.info(log_message)
 
-    def calibrateAll(self, numOfSamples):
+    def calibrateAll(numOfSamples):
         # Calibrate all IMUs in the imuList which are not None, averaging the middle 99% of the returned a and g bias values across numOfSamples
         bias_data = []
         CAV_imus.imuNoises = []
@@ -104,7 +104,7 @@ class CAV_imus:
                     imu.abias = avgABias.tolist()
                     imu.gbias = avgGBias.tolist()
                     imu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
-                    self.logIMUConfiguration(
+                    CAV_imus.logIMUConfiguration(
                         f"IMU{CAV_imus.imuList.index(imu) + 1}",
                         gfs=GFS_250,
                         afs=AFS_2G,
@@ -128,7 +128,7 @@ class CAV_imus:
         except Exception as e:
             logging.error(f"Error during calibration: {e}")
 
-    def importSavedBias(self):
+    def importSavedBias():
         # Read bias values and noise from imu.conf and apply them to the respective IMUs
         if not os.path.exists("imu.conf"):
             error_message = "Error: imu.conf file not found."
@@ -177,7 +177,7 @@ class CAV_imus:
                         imu.abias = aBias
                         imu.gbias = gBias
                         imu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
-                        self.logIMUConfiguration(
+                        CAV_imus.logIMUConfiguration(
                             f"IMU{idx + 1}",
                             gfs=GFS_250,
                             afs=AFS_2G,
