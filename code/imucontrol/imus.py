@@ -11,7 +11,7 @@ import logging
 import numpy as np
 from mpu9250_jmdev.mpu_9250 import MPU9250
 from mpu9250_jmdev.registers import *
-import imu
+from imu import imu
 
 # Configure logging
 logging.basicConfig(filename="imu.log", level=logging.INFO, format="%(asctime)s - %(message)s")
