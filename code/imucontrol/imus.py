@@ -239,11 +239,15 @@ class CAV_imus:
                             gNoise = list(map(float, gNoiseLine.split(":")[1].strip(" []").split(",")))
                         else:
                             raise ValueError("Invalid gyroscope noise format.")
+                        
+                        print("Line parsing complete.")
 
                         # Apply biases to MPU9250
                         imu_obj.mpu.abias = aBias
                         imu_obj.mpu.gbias = gBias
                         imu_obj.mpu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
+
+                        print("Biases applied to MPU9250.")
 
                         # Apply noise values to imu object
                         imu_obj.aNoiseVals = aNoise
@@ -271,7 +275,7 @@ class CAV_imus:
                 imuIndex = int(imuRef.strip().split("IMU")[1]) - 1
                 CAV_imus.imuAliases[alias] = CAV_imus.imuList[imuIndex]
             logging.info("IMU configuration and aliases imported from imu.conf.")
-            
+
         except Exception as e:
             error_message = f"Error: Failed to read or parse imu.conf. {e}"
             print(error_message)
