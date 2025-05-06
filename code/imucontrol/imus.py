@@ -144,8 +144,10 @@ class CAV_imus:
                     if imu_obj is not None:
                         # Save IMU creation information
                         file.write(f"IMU{idx + 1} Position: {imu_obj.pos}\n")
-                        file.write(f"IMU{idx + 1} FB Index: {imu_obj.fbIndex}, LR Index: {imu_obj.lrIndex}\n")
-                        file.write(f"IMU{idx + 1} FB Mod: {imu_obj.fbMod}, LR Mod: {imu_obj.lrMod}\n")
+                        file.write(f"IMU{idx + 1} FB Index: {imu_obj.fbIndex}\n")
+                        file.write(f"IMU{idx + 1} LR Index: {imu_obj.lrIndex}\n")
+                        file.write(f"IMU{idx + 1} FB Mod: {imu_obj.fbMod}\n")
+                        file.write(f"IMU{idx + 1} LR Mod: {imu_obj.lrMod}\n")
                         # Save bias and noise values
                         file.write(f"IMU{idx + 1} Accelerometer Bias: {imu_obj.mpu.abias}\n")
                         file.write(f"IMU{idx + 1} Gyroscope Bias: {imu_obj.mpu.gbias}\n")
@@ -166,7 +168,7 @@ class CAV_imus:
             print(error_message)
             logging.error(error_message)
             return
-
+        
         try:
             with open("imu.conf", "r") as file:
                 lines = file.readlines()
@@ -176,13 +178,15 @@ class CAV_imus:
                 if imu_obj is not None:
                     try:
                         # Parse IMU creation information
-                        posLine = lines[idx * 7].strip()
-                        fbIndexLine = lines[idx * 7 + 1].strip()
-                        fbModLine = lines[idx * 7 + 2].strip()
-                        aBiasLine = lines[idx * 7 + 3].strip()
-                        gBiasLine = lines[idx * 7 + 4].strip()
-                        aNoiseLine = lines[idx * 7 + 5].strip()
-                        gNoiseLine = lines[idx * 7 + 6].strip()
+                        posLine = lines[idx * 9].strip()
+                        fbIndexLine = lines[idx * 9 + 1].strip()
+                        lrIndexLine = lines[idx * 9 + 2].strip()
+                        fbModLine = lines[idx * 9 + 3].strip()
+                        lrModLine = lines[idx * 9 + 4].strip()
+                        aBiasLine = lines[idx * 9 + 5].strip()
+                        gBiasLine = lines[idx * 9 + 6].strip()
+                        aNoiseLine = lines[idx * 9 + 7].strip()
+                        gNoiseLine = lines[idx * 9 + 8].strip()
 
                         # Extract position
                         if "Position:" in posLine:
@@ -191,20 +195,26 @@ class CAV_imus:
                             raise ValueError("Invalid position format.")
 
                         # Extract FB and LR indices
-                        if "FB Index:" in fbIndexLine and "LR Index:" in fbIndexLine:
-                            indices = fbIndexLine.split(":")[1].strip().split(", ")
-                            imu_obj.fbIndex = int(indices[0].split()[0])
-                            imu_obj.lrIndex = int(indices[1].split()[0])
+                        if "FB Index:" in fbIndexLine:
+                            imu_obj.fbIndex = int(fbIndexLine.split(":")[1].strip())
                         else:
-                            raise ValueError("Invalid FB/LR index format.")
+                            raise ValueError("Invalid FB index format.")
+
+                        if "LR Index:" in lrIndexLine:
+                            imu_obj.lrIndex = int(lrIndexLine.split(":")[1].strip())
+                        else:
+                            raise ValueError("Invalid LR index format.")
 
                         # Extract FB and LR modifiers
-                        if "FB Mod:" in fbModLine and "LR Mod:" in fbModLine:
-                            mods = fbModLine.split(":")[1].strip().split(", ")
-                            imu_obj.fbMod = int(mods[0].split()[0])
-                            imu_obj.lrMod = int(mods[1].split()[0])
+                        if "FB Mod:" in fbModLine:
+                            imu_obj.fbMod = int(fbModLine.split(":")[1].strip())
                         else:
-                            raise ValueError("Invalid FB/LR modifier format.")
+                            raise ValueError("Invalid FB modifier format.")
+
+                        if "LR Mod:" in lrModLine:
+                            imu_obj.lrMod = int(lrModLine.split(":")[1].strip())
+                        else:
+                            raise ValueError("Invalid LR modifier format.")
 
                         # Parse accelerometer bias
                         if "Accelerometer Bias:" in aBiasLine:
@@ -252,7 +262,7 @@ class CAV_imus:
                         logging.error(error_message)
 
             # Parse imuAliases
-            aliasStartIndex = len(CAV_imus.imuList) * 7
+            aliasStartIndex = len(CAV_imus.imuList) * 9
             for line in lines[aliasStartIndex:]:
                 if "IMU Aliases:" in line:
                     continue
@@ -261,6 +271,7 @@ class CAV_imus:
                 imuIndex = int(imuRef.strip().split("IMU")[1]) - 1
                 CAV_imus.imuAliases[alias] = CAV_imus.imuList[imuIndex]
             logging.info("IMU configuration and aliases imported from imu.conf.")
+            
         except Exception as e:
             error_message = f"Error: Failed to read or parse imu.conf. {e}"
             print(error_message)
