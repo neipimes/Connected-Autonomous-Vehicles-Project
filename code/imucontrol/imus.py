@@ -132,18 +132,35 @@ class CAV_imus:
                     )
 
             # Save bias data and noise to imu.conf
+            CAV_imus.saveConfig()
+        except Exception as e:
+            logging.error(f"Error during calibration: {e}")
+
+    def saveConfig():
+        # Save IMU configuration, biases, noise values, and aliases to imu.conf
+        try:
             with open("imu.conf", "w") as file:
                 for idx, imu_obj in enumerate(CAV_imus.imuList):
                     if imu_obj is not None:
+                        # Save IMU creation information
+                        file.write(f"IMU{idx + 1} Position: {imu_obj.pos}\n")
+                        file.write(f"IMU{idx + 1} FB Index: {imu_obj.fbIndex}, LR Index: {imu_obj.lrIndex}\n")
+                        file.write(f"IMU{idx + 1} FB Mod: {imu_obj.fbMod}, LR Mod: {imu_obj.lrMod}\n")
+                        # Save bias and noise values
                         file.write(f"IMU{idx + 1} Accelerometer Bias: {imu_obj.mpu.abias}\n")
                         file.write(f"IMU{idx + 1} Gyroscope Bias: {imu_obj.mpu.gbias}\n")
                         file.write(f"IMU{idx + 1} A Bias Noise: {imu_obj.aNoiseVals}\n")
                         file.write(f"IMU{idx + 1} G Bias Noise: {imu_obj.gNoiseVals}\n")
+                # Save imuAliases
+                file.write("IMU Aliases:\n")
+                for alias, imu_obj in CAV_imus.imuAliases.items():
+                    file.write(f"{alias}: IMU{CAV_imus.imuList.index(imu_obj) + 1}\n")
+            logging.info("IMU configuration and aliases saved to imu.conf.")
         except Exception as e:
-            logging.error(f"Error during calibration: {e}")
+            logging.error(f"Error saving configuration: {e}")
 
-    def importSavedBias():
-        # Read bias values and noise from imu.conf and apply them to the respective IMUs
+    def importSavedConfig():
+        # Import IMU configuration, biases, noise values, and aliases from imu.conf
         if not os.path.exists("imu.conf"):
             error_message = "Error: imu.conf file not found."
             print(error_message)
@@ -154,13 +171,40 @@ class CAV_imus:
             with open("imu.conf", "r") as file:
                 lines = file.readlines()
 
+            CAV_imus.imuAliases = {}
             for idx, imu_obj in enumerate(CAV_imus.imuList):
                 if imu_obj is not None:
                     try:
-                        aBiasLine = lines[idx * 4].strip()
-                        gBiasLine = lines[idx * 4 + 1].strip()
-                        aNoiseLine = lines[idx * 4 + 2].strip()
-                        gNoiseLine = lines[idx * 4 + 3].strip()
+                        # Parse IMU creation information
+                        posLine = lines[idx * 7].strip()
+                        fbIndexLine = lines[idx * 7 + 1].strip()
+                        fbModLine = lines[idx * 7 + 2].strip()
+                        aBiasLine = lines[idx * 7 + 3].strip()
+                        gBiasLine = lines[idx * 7 + 4].strip()
+                        aNoiseLine = lines[idx * 7 + 5].strip()
+                        gNoiseLine = lines[idx * 7 + 6].strip()
+
+                        # Extract position
+                        if "Position:" in posLine:
+                            imu_obj.pos = posLine.split(":")[1].strip()
+                        else:
+                            raise ValueError("Invalid position format.")
+
+                        # Extract FB and LR indices
+                        if "FB Index:" in fbIndexLine and "LR Index:" in fbIndexLine:
+                            indices = fbIndexLine.split(":")[1].strip().split(", ")
+                            imu_obj.fbIndex = int(indices[0].split()[0])
+                            imu_obj.lrIndex = int(indices[1].split()[0])
+                        else:
+                            raise ValueError("Invalid FB/LR index format.")
+
+                        # Extract FB and LR modifiers
+                        if "FB Mod:" in fbModLine and "LR Mod:" in fbModLine:
+                            mods = fbModLine.split(":")[1].strip().split(", ")
+                            imu_obj.fbMod = int(mods[0].split()[0])
+                            imu_obj.lrMod = int(mods[1].split()[0])
+                        else:
+                            raise ValueError("Invalid FB/LR modifier format.")
 
                         # Parse accelerometer bias
                         if "Accelerometer Bias:" in aBiasLine:
@@ -206,6 +250,17 @@ class CAV_imus:
                         error_message = f"Error: Invalid data for IMU{idx + 1}. {e}"
                         print(error_message)
                         logging.error(error_message)
+
+            # Parse imuAliases
+            aliasStartIndex = len(CAV_imus.imuList) * 7
+            for line in lines[aliasStartIndex:]:
+                if "IMU Aliases:" in line:
+                    continue
+                alias, imuRef = line.strip().split(":")
+                alias = alias.strip()
+                imuIndex = int(imuRef.strip().split("IMU")[1]) - 1
+                CAV_imus.imuAliases[alias] = CAV_imus.imuList[imuIndex]
+            logging.info("IMU configuration and aliases imported from imu.conf.")
         except Exception as e:
             error_message = f"Error: Failed to read or parse imu.conf. {e}"
             print(error_message)
@@ -218,5 +273,5 @@ class CAV_imus:
 
     def start():
         # Setup function to be run to initialise the IMUs.
-        # Currently will only run the importSavedBias function to load the bias values from the imu.conf file.
-        CAV_imus.importSavedBias()
+        # Currently will only run the importSavedConfig function to load the bias values from the imu.conf file.
+        CAV_imus.importSavedConfig()
