@@ -240,22 +240,14 @@ class CAV_imus:
                         else:
                             raise ValueError("Invalid gyroscope noise format.")
                         
-                        print("Line parsing complete.")
-
                         # Apply biases to MPU9250
                         imu_obj.mpu.abias = aBias
                         imu_obj.mpu.gbias = gBias
                         imu_obj.mpu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
 
-                        print("Biases applied to MPU9250.")
-
                         # Apply noise values to imu object
                         imu_obj.aNoiseVals = aNoise
                         imu_obj.gNoiseVals = gNoise
-
-                        #TODO: Have some solution to identify if an IMU does not have data saved
-                        # Possibly an id of the imu should be saved in conf file, which will be
-                        # used to identify the IMU in the list.
 
                         CAV_imus.logIMUConfiguration(
                             f"IMU{idx + 1}",
@@ -277,7 +269,10 @@ class CAV_imus:
                 alias, imuRef = line.strip().split(":")
                 alias = alias.strip()
                 imuIndex = int(imuRef.strip().split("IMU")[1]) - 1
-                CAV_imus.imuAliases[alias] = CAV_imus.imuList[imuIndex]
+                CAV_imus.imuAliases[alias] = CAV_imus.imuList[imuIndex] # TODO: Removing imu2 from imuList causes a fuck up here where imu5 is not added to the aliases.
+                # E.g. IMU5 is in index 3, not index 4 as it would be if index 1 didn't contain IMU3.
+                # TODO: Could have the second entry be None in the base global imuList, and then drop the None values when enumerating in above loop.
+                # This means we could still have working alias matching here.
             logging.info("IMU configuration and aliases imported from imu.conf.")
 
         except Exception as e:
