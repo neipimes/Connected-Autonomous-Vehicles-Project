@@ -269,7 +269,61 @@ class CAV_imus:
     def getAvgData():
         # Iterate over the IMUs, get their measurements for a direction, modify according to layout,
         # and return the average of the measurements for that direction balanced by thier respective noise values.
-        return (0,0)
+
+        # FB, LR and Turn Angle Values
+        allAccFBData = []
+        allAccLRData = []
+        allAccFBNoise = []
+        allAccLRNoise = []
+        allTurnAngleData = []
+        allTurnAngleNoise = []
+        for imu_obj in CAV_imus.imuList:
+            if imu_obj is not None:
+                allAccFBData.append(imu_obj.getFBAccelData())
+                allAccFBNoise.append(imu_obj.getFBAcellNoise())
+                allAccLRData.append(imu_obj.getLRAccelData())
+                allAccLRNoise.append(imu_obj.getLRAcellNoise())
+                allTurnAngleData.append(imu_obj.getTurnAngle())
+                allTurnAngleNoise.append(imu_obj.getTurnAngleNoise())
+        
+        for i in range(len(allAccFBNoise)):
+            # Invert the noise values to be a multiplier for the data value, then
+            # raise to a power to increase the effect of the noise value on the data value.
+            allAccFBNoise[i] = (1 - allAccFBNoise[i]) ** 20 
+            allAccLRNoise[i] = (1 - allAccLRNoise[i]) ** 20
+            allTurnAngleNoise[i] = (1 - allTurnAngleNoise[i]) ** 20
+        
+        weightsFB = []
+        weightsLR = []
+        weightsTA = []
+        for i in range(len(allAccFBNoise)):
+            # Divide the noise value by the sum of the noise values to get a weighted multiplier for the data value.
+            weightsFB.append(allAccFBNoise[i] / sum(allAccFBNoise))
+            weightsLR.append(allAccLRNoise[i] / sum(allAccLRNoise))
+            weightsTA.append(allTurnAngleNoise[i] / sum(allTurnAngleNoise))
+
+        avgFB = None
+        avgLR = None
+        avgTA = None
+        for i in range(len(allAccFBData)):
+            # Multiply the data value by the weighted noise value to get a weighted data value.
+            if avgFB is None:
+                avgFB = allAccFBData[i] * weightsFB[i]
+            else:
+                avgFB = avgFB + allAccFBData[i] * weightsFB[i]
+            
+            if avgLR is None:
+                avgLR = allAccLRData[i] * weightsLR[i]
+            else:
+                avgLR = avgLR + allAccLRData[i] * weightsLR[i]
+
+            if avgTA is None:
+                avgTA = allTurnAngleData[i] * weightsTA[i]
+            else:
+                avgTA = avgTA + allTurnAngleData[i] * weightsTA[i]
+                
+
+        return (avgFB, avgLR, avgTA) # Return the average values for FB, LR and Turn Angle.
 
     def start():
         # Setup function to be run to initialise the IMUs.
