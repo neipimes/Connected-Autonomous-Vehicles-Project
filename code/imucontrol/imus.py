@@ -56,11 +56,11 @@ class CAV_imus:
         mode=None)
     
     # Forward and Left: Positive values. Back and Right: Negative values.
-    imu1 = imu("Front", mpu1, [0, 0, 0], 0, 1, -1, -1) # Front IMU
+    imu1 = imu("Front", mpu1, [0, 0, 0], [0, 0, 0], 0, 1, -1, -1) # Front IMU
     imu2 = None # This IMU is not used in the current configuration
-    imu3 = imu("Left", mpu3, [0, 0, 0], 1, 0, 1, -1) # Left IMU
-    imu4 = imu("Right", mpu4, [0, 0, 0], 1, 0, -1, 1) # Right IMU
-    imu5 = imu("Back", mpu5, [0, 0, 0], 0, 1, 1, 1) # Back IMU
+    imu3 = imu("Left", mpu3, [0, 0, 0], [0, 0, 0], 1, 0, 1, -1) # Left IMU
+    imu4 = imu("Right", mpu4, [0, 0, 0], [0, 0, 0], 1, 0, -1, 1) # Right IMU
+    imu5 = imu("Back", mpu5, [0, 0, 0], [0, 0, 0], 0, 1, 1, 1) # Back IMU
 
     imuList = [imu1, imu2, imu3, imu4, imu5]
     imuAliases = {"Front": imu1, "Back": imu5, "Left": imu3, "Right": imu4}
