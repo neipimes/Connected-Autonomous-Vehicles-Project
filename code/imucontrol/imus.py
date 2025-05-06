@@ -11,7 +11,7 @@ import logging
 import numpy as np
 from mpu9250_jmdev.mpu_9250 import MPU9250
 from mpu9250_jmdev.registers import *
-from imu import imu
+import imu
 
 # Configure logging
 logging.basicConfig(filename="imu.log", level=logging.INFO, format="%(asctime)s - %(message)s")
@@ -277,6 +277,11 @@ class CAV_imus:
         allAccLRNoise = []
         allTurnAngleData = []
         allTurnAngleNoise = []
+
+        # TODO: May have to restructure this to grab the data for each axis in the same loop to avoid 
+        #       measurements being read out of sync from each other.
+        #       This means the individual axes will be slightly more out of sync, but individual axis
+        #       accuracy will increase.
         for imu_obj in CAV_imus.imuList:
             if imu_obj is not None:
                 allAccFBData.append(imu_obj.getFBAccelData())
