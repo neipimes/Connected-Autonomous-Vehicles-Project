@@ -11,12 +11,13 @@ import logging
 import numpy as np
 from mpu9250_jmdev.mpu_9250 import MPU9250
 from mpu9250_jmdev.registers import *
+from imu import imu
 
 # Configure logging
 logging.basicConfig(filename="imu.log", level=logging.INFO, format="%(asctime)s - %(message)s")
 
 class CAV_imus:
-    imu1 = MPU9250(address_ak=None, 
+    mpu1 = MPU9250(address_ak=None, 
         address_mpu_master=MPU9050_ADDRESS_68, 
         address_mpu_slave=None, 
         bus=1, 
@@ -25,9 +26,9 @@ class CAV_imus:
         mfs=None, 
         mode=None)
 
-    imu2 = None # This IMU is not used in the current configuration
+    mpu2 = None # This IMU is not used in the current configuration
 
-    imu3 = MPU9250(address_ak=None, 
+    mpu3 = MPU9250(address_ak=None, 
         address_mpu_master=MPU9050_ADDRESS_69, # IMU3 has its AD0 pin set to high, so its I2C address is 0x69
         address_mpu_slave=None, 
         bus=1, 
@@ -36,7 +37,7 @@ class CAV_imus:
         mfs=None, 
         mode=None)
 
-    imu4 = MPU9250(address_ak=None, 
+    mpu4 = MPU9250(address_ak=None, 
         address_mpu_master=MPU9050_ADDRESS_69, # IMU4 has its AD0 pin set to high, so its I2C address is 0x69
         address_mpu_slave=None, 
         bus=8, 
@@ -45,7 +46,7 @@ class CAV_imus:
         mfs=None, 
         mode=None)
 
-    imu5 = MPU9250(address_ak=None, 
+    mpu5 = MPU9250(address_ak=None, 
         address_mpu_master=MPU9050_ADDRESS_68,
         address_mpu_slave=None, 
         bus=8, 
@@ -53,10 +54,16 @@ class CAV_imus:
         afs=AFS_2G, # Max of 2g
         mfs=None, 
         mode=None)
+    
+    # Forward and Left: Positive values. Back and Right: Negative values.
+    imu1 = imu("Front", mpu1, [0, 0, 0], 0, 1, -1, -1) # Front IMU
+    imu2 = None # This IMU is not used in the current configuration
+    imu3 = imu("Left", mpu3, [0, 0, 0], 1, 0, 1, -1) # Left IMU
+    imu4 = imu("Right", mpu4, [0, 0, 0], 1, 0, -1, 1) # Right IMU
+    imu5 = imu("Back", mpu5, [0, 0, 0], 0, 1, 1, 1) # Back IMU
 
     imuList = [imu1, imu2, imu3, imu4, imu5]
     imuAliases = {"Front": imu1, "Back": imu5, "Left": imu3, "Right": imu4}
-    imuNoises = []
 
     def logIMUConfiguration(imu_name, gfs=None, afs=None, abias=None, gbias=None):
         log_message = f"{imu_name} configuration updated:"
@@ -70,18 +77,16 @@ class CAV_imus:
 
     def calibrateAll(numOfSamples):
         # Calibrate all IMUs in the imuList which are not None, averaging the middle 99% of the returned a and g bias values across numOfSamples
-        bias_data = []
-        CAV_imus.imuNoises = []
         try:
-            for imu in CAV_imus.imuList:
-                if imu is not None:
-                    imu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
+            for imu_obj in CAV_imus.imuList:
+                if imu_obj is not None:
+                    imu_obj.mpu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
                     aBiasSamples = []
                     gBiasSamples = []
                     for _ in range(numOfSamples):
-                        imu.calibrateMPU6500()
-                        aBiasSamples.append(imu.abias)
-                        gBiasSamples.append(imu.gbias)
+                        imu_obj.mpu.calibrateMPU6500()
+                        aBiasSamples.append(imu_obj.mpu.abias)
+                        gBiasSamples.append(imu_obj.mpu.gbias)
 
                     # Convert to numpy arrays for easier processing
                     aBiasSamples = np.array(aBiasSamples)
@@ -109,30 +114,31 @@ class CAV_imus:
                         aBiasNoise.append(np.max(np.abs((aBiasSorted[[0, -1]] - avgABias[-1]) / avgABias[-1])))
                         gBiasNoise.append(np.max(np.abs((gBiasSorted[[0, -1]] - avgGBias[-1]) / avgGBias[-1])))
 
-                    imu.abias = avgABias
-                    imu.gbias = avgGBias
-                    imu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
+                    # Update MPU9250 biases
+                    imu_obj.mpu.abias = avgABias
+                    imu_obj.mpu.gbias = avgGBias
+                    imu_obj.mpu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
+
+                    # Update imu object noise values
+                    imu_obj.aNoiseVals = aBiasNoise
+                    imu_obj.gNoiseVals = gBiasNoise
+
                     CAV_imus.logIMUConfiguration(
-                        f"IMU{CAV_imus.imuList.index(imu) + 1}",
+                        f"IMU{CAV_imus.imuList.index(imu_obj) + 1}",
                         gfs=GFS_250,
                         afs=AFS_2G,
-                        abias=imu.abias,
-                        gbias=imu.gbias
+                        abias=imu_obj.mpu.abias,
+                        gbias=imu_obj.mpu.gbias
                     )
-                    bias_data.append((avgABias, avgGBias))
-                    CAV_imus.imuNoises.append((aBiasNoise, gBiasNoise))
-                else:
-                    # If IMU is None, append zeros
-                    bias_data.append(([0, 0, 0], [0, 0, 0]))
-                    CAV_imus.imuNoises.append(([0, 0, 0], [0, 0, 0]))
 
             # Save bias data and noise to imu.conf
             with open("imu.conf", "w") as file:
-                for idx, (aBias, gBias) in enumerate(bias_data):
-                    file.write(f"IMU{idx + 1} Accelerometer Bias: {aBias}\n")
-                    file.write(f"IMU{idx + 1} Gyroscope Bias: {gBias}\n")
-                    file.write(f"IMU{idx + 1} A Bias Noise: {CAV_imus.imuNoises[idx][0]}\n")
-                    file.write(f"IMU{idx + 1} G Bias Noise: {CAV_imus.imuNoises[idx][1]}\n")
+                for idx, imu_obj in enumerate(CAV_imus.imuList):
+                    if imu_obj is not None:
+                        file.write(f"IMU{idx + 1} Accelerometer Bias: {imu_obj.mpu.abias}\n")
+                        file.write(f"IMU{idx + 1} Gyroscope Bias: {imu_obj.mpu.gbias}\n")
+                        file.write(f"IMU{idx + 1} A Bias Noise: {imu_obj.aNoiseVals}\n")
+                        file.write(f"IMU{idx + 1} G Bias Noise: {imu_obj.gNoiseVals}\n")
         except Exception as e:
             logging.error(f"Error during calibration: {e}")
 
@@ -148,9 +154,8 @@ class CAV_imus:
             with open("imu.conf", "r") as file:
                 lines = file.readlines()
 
-            CAV_imus.imuNoises = []
-            for idx, imu in enumerate(CAV_imus.imuList):
-                if imu is not None:
+            for idx, imu_obj in enumerate(CAV_imus.imuList):
+                if imu_obj is not None:
                     try:
                         aBiasLine = lines[idx * 4].strip()
                         gBiasLine = lines[idx * 4 + 1].strip()
@@ -181,30 +186,37 @@ class CAV_imus:
                         else:
                             raise ValueError("Invalid gyroscope noise format.")
 
-                        # Apply biases and noise to the IMU
-                        imu.abias = aBias
-                        imu.gbias = gBias
-                        imu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
+                        # Apply biases to MPU9250
+                        imu_obj.mpu.abias = aBias
+                        imu_obj.mpu.gbias = gBias
+                        imu_obj.mpu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
+
+                        # Apply noise values to imu object
+                        imu_obj.aNoiseVals = aNoise
+                        imu_obj.gNoiseVals = gNoise
+
                         CAV_imus.logIMUConfiguration(
                             f"IMU{idx + 1}",
                             gfs=GFS_250,
                             afs=AFS_2G,
-                            abias=imu.abias,
-                            gbias=imu.gbias
+                            abias=imu_obj.mpu.abias,
+                            gbias=imu_obj.mpu.gbias
                         )
-                        CAV_imus.imuNoises.append((aNoise, gNoise))
                     except (ValueError, IndexError) as e:
                         error_message = f"Error: Invalid data for IMU{idx + 1}. {e}"
                         print(error_message)
                         logging.error(error_message)
-                        CAV_imus.imuNoises.append(([0, 0, 0], [0, 0, 0]))
-                else:
-                    warning_message = f"Warning: IMU{idx + 1} is not configured. Skipping bias application."
-                    print(warning_message)
-                    logging.warning(warning_message)
-                    CAV_imus.imuNoises.append(([0, 0, 0], [0, 0, 0]))
         except Exception as e:
             error_message = f"Error: Failed to read or parse imu.conf. {e}"
             print(error_message)
             logging.error(error_message)
 
+    def getAvgData():
+        # Iterate over the IMUs, get their measurements for a direction, modify according to layout,
+        # and return the average of the measurements for that direction balanced by thier respective noise values.
+        return (0,0)
+
+    def start():
+        # Setup function to be run to initialise the IMUs.
+        # Currently will only run the importSavedBias function to load the bias values from the imu.conf file.
+        CAV_imus.importSavedBias()
