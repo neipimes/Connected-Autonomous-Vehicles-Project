@@ -62,7 +62,7 @@ class CAV_imus:
     imu4 = imu("Right", mpu4, [0, 0, 0], [0, 0, 0], 1, 0, -1, 1) # Right IMU
     imu5 = imu("Back", mpu5, [0, 0, 0], [0, 0, 0], 0, 1, 1, 1) # Back IMU
 
-    imuList = [imu1, imu2, imu3, imu4, imu5]
+    imuList = [imu1, imu3, imu4, imu5]
     imuAliases = {"Front": imu1, "Back": imu5, "Left": imu3, "Right": imu4}
 
     def logIMUConfiguration(imu_name, gfs=None, afs=None, abias=None, gbias=None):
@@ -252,6 +252,10 @@ class CAV_imus:
                         # Apply noise values to imu object
                         imu_obj.aNoiseVals = aNoise
                         imu_obj.gNoiseVals = gNoise
+
+                        #TODO: Have some solution to identify if an IMU does not have data saved
+                        # Possibly an id of the imu should be saved in conf file, which will be
+                        # used to identify the IMU in the list.
 
                         CAV_imus.logIMUConfiguration(
                             f"IMU{idx + 1}",
