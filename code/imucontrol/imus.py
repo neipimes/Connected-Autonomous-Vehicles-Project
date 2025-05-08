@@ -92,17 +92,17 @@ class CAV_imus:
                     aBiasSamples = np.array(aBiasSamples)
                     gBiasSamples = np.array(gBiasSamples)
 
-                    # Calculate the middle 99% range for each axis
+                    # Calculate the middle 95% range for each axis
                     avgABias = []
                     avgGBias = []
                     aBiasNoise = []
                     gBiasNoise = []
 
                     for axis in range(3):  # Iterate over x, y, z axes
-                        aBiasFiltered = np.percentile(aBiasSamples[:, axis], [0.5, 99.5])
-                        gBiasFiltered = np.percentile(gBiasSamples[:, axis], [0.5, 99.5])
+                        aBiasFiltered = np.percentile(aBiasSamples[:, axis], [0.5, 95.5])
+                        gBiasFiltered = np.percentile(gBiasSamples[:, axis], [0.5, 95.5])
 
-                        # Average the middle 99% values for this axis
+                        # Average the middle 95% values for this axis
                         avgABias.append(np.mean(aBiasSamples[(aBiasSamples[:, axis] >= aBiasFiltered[0]) & 
                                                               (aBiasSamples[:, axis] <= aBiasFiltered[1]), axis]))
                         avgGBias.append(np.mean(gBiasSamples[(gBiasSamples[:, axis] >= gBiasFiltered[0]) & 
