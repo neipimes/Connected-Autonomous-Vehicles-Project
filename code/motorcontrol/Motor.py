@@ -30,6 +30,30 @@ class motor:
         logging.info("Stopping motor. Command: S0")
         motor.ser.write(command.encode())
 
+    def importConfig():
+        # Import the motor configuration from a file located in ~/configs/motor.conf 
+        try:
+            with open("~/configs/motor.conf", "r") as config_file:
+                for line in config_file:
+                    if line.startswith("port="):
+                        motor.port = line.split("=")[1].strip()
+                    elif line.startswith("baud="):
+                        motor.baud = int(line.split("=")[1].strip())
+                    elif line.startswith("timeout="):
+                        motor.timeout = int(line.split("=")[1].strip())
+            logging.info("Motor configuration imported successfully.")
+        except Exception as e:
+            logging.error(f"Error importing motor configuration: {e}")
+        
+    def saveConfig():
+        # Save the motor configuration to a file located in ~/configs/motor.conf 
+        try:
+            with open("~/configs/motor.conf", "w") as config_file:
+                config_file.write(f"port={motor.port}\nbaud={motor.baud}\ntimeout={motor.timeout}")
+                logging.info("Motor configuration saved successfully.")
+        except Exception as e:
+            logging.error(f"Error saving motor configuration: {e}")
+
     def start():
         # Initialize the serial connection
         try:
