@@ -12,7 +12,7 @@ class motor:
     ser = None  # Serial object to communicate with onboard arduino
 
     # Initialise logging
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(filename="~/logs/motor.log", level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logging.info("Motor class initialized.")
 
     def setMotorSpeed(speed: int):
