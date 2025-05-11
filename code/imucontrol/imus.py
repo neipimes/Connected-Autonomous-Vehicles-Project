@@ -65,6 +65,11 @@ class CAV_imus:
     imuList = [imu1, imu3, imu4, imu5]
     imuAliases = {"Front": imu1, "Back": imu5, "Left": imu3, "Right": imu4}
 
+    # Track the IMUs that have the lowest acceleration noise values for each axis
+    # This is used to determine which IMU to use for each axis when calculating the average data.
+    imuFB = None
+    imuLR = None
+
     def logIMUConfiguration(imu_name, gfs=None, afs=None, abias=None, gbias=None):
         log_message = f"{imu_name} configuration updated:"
         if gfs is not None and afs is not None:
@@ -75,8 +80,30 @@ class CAV_imus:
             log_message += f" Gyroscope Bias: {gbias};"
         logging.info(log_message)
 
+    def updateLowestNoiseIMUs():
+        # Determine and assign the IMUs with the lowest acceleration noise values for FB and LR axes
+        try:
+            lowestFBNoise = float('inf')
+            lowestLRNoise = float('inf')
+            CAV_imus.imuFB = None
+            CAV_imus.imuLR = None
+
+            for imu_obj in CAV_imus.imuList:
+                if imu_obj is not None:
+                    if imu_obj.getFBAcellNoise() < lowestFBNoise:  # Assuming index 0 corresponds to FB axis
+                        lowestFBNoise = imu_obj.getFBAcellNoise()
+                        CAV_imus.imuFB = imu_obj
+                    if imu_obj.getLRAcellNoise() < lowestLRNoise:  # Assuming index 1 corresponds to LR axis
+                        lowestLRNoise = imu_obj.getLRAcellNoise()
+                        CAV_imus.imuLR = imu_obj
+
+            logging.info(f"IMU with lowest FB noise: {CAV_imus.imuFB.pos if CAV_imus.imuFB else 'None'}")
+            logging.info(f"IMU with lowest LR noise: {CAV_imus.imuLR.pos if CAV_imus.imuLR else 'None'}")
+        except Exception as e:
+            logging.error(f"Error updating lowest noise IMUs: {e}")
+
     def calibrateAll(numOfSamples):
-        # Calibrate all IMUs in the imuList which are not None, averaging the middle 99% of the returned a and g bias values across numOfSamples
+        # Calibrate all IMUs in the imuList which are not None, averaging the middle 95% of the returned a and g bias values across numOfSamples
         try:
             for imu_obj in CAV_imus.imuList:
                 if imu_obj is not None:
@@ -130,6 +157,9 @@ class CAV_imus:
                         abias=imu_obj.mpu.abias,
                         gbias=imu_obj.mpu.gbias
                     )
+
+            # Update the IMUs with the lowest noise values
+            CAV_imus.updateLowestNoiseIMUs()
 
             # Save bias data and noise to imu.conf
             CAV_imus.saveConfig()
@@ -264,6 +294,9 @@ class CAV_imus:
                         print(error_message)
                         logging.error(error_message)
 
+            # Update the IMUs with the lowest noise values
+            CAV_imus.updateLowestNoiseIMUs()
+
             # Parse imuAliases
             aliasStartIndex = len(CAV_imus.imuList) * 9
             for line in lines[aliasStartIndex:]:
@@ -299,6 +332,11 @@ class CAV_imus:
         #       measurements being read out of sync from each other.
         #       This means the individual axes will be slightly more out of sync, but individual axis
         #       accuracy will increase.
+
+        # TODO: Averaging across all IMUs is not perfect, as the measurement of the most reliable IMU should be enough to determine an accurate values.
+        #       This is different for the turn angle, where averaging does seem to make the result more accurate (Noise is more random).
+        #       For acceleration, using the most reliable (or top 2) IMU(s) should be enough to determine an accurate value. Could be worse over longer periods of time however.
+        
         for imu_obj in CAV_imus.imuList:
             if imu_obj is not None:
                 allAccFBData.append(imu_obj.getFBAccelData())
