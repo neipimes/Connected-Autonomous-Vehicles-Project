@@ -137,9 +137,11 @@ class CAV_imus:
             logging.error(f"Error during calibration: {e}")
 
     def saveConfig():
-        # Save IMU configuration, biases, noise values, and aliases to imu.conf
+        # Save IMU configuration, biases, noise values, and aliases to ~/configs/imu.conf
         try:
-            with open("imu.conf", "w") as file:
+            config_path = os.path.expanduser("~/configs/imu.conf")
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, "w") as file:
                 for idx, imu_obj in enumerate(CAV_imus.imuList):
                     if imu_obj is not None:
                         # Save IMU creation information
@@ -157,20 +159,21 @@ class CAV_imus:
                 file.write("IMU Aliases:\n")
                 for alias, imu_obj in CAV_imus.imuAliases.items():
                     file.write(f"{alias}: IMU{CAV_imus.imuList.index(imu_obj) + 1}\n")
-            logging.info("IMU configuration and aliases saved to imu.conf.")
+            logging.info("IMU configuration and aliases saved to ~/configs/imu.conf.")
         except Exception as e:
             logging.error(f"Error saving configuration: {e}")
 
     def importSavedConfig():
-        # Import IMU configuration, biases, noise values, and aliases from imu.conf
-        if not os.path.exists("imu.conf"):
-            error_message = "Error: imu.conf file not found."
+        # Import IMU configuration, biases, noise values, and aliases from ~/configs/imu.conf
+        config_path = os.path.expanduser("~/configs/imu.conf")
+        if not os.path.exists(config_path):
+            error_message = "Error: ~/configs/imu.conf file not found."
             print(error_message)
             logging.error(error_message)
             return
         
         try:
-            with open("imu.conf", "r") as file:
+            with open(config_path, "r") as file:
                 lines = file.readlines()
 
             CAV_imus.imuAliases = {}
@@ -273,10 +276,10 @@ class CAV_imus:
                 # E.g. IMU5 is in index 3, not index 4 as it would be if index 1 didn't contain IMU3.
                 # TODO: Could have the second entry be None in the base global imuList, and then drop the None values when enumerating in above loop.
                 # This means we could still have working alias matching here.
-            logging.info("IMU configuration and aliases imported from imu.conf.")
+            logging.info("IMU configuration and aliases imported from ~/configs/imu.conf.")
 
         except Exception as e:
-            error_message = f"Error: Failed to read or parse imu.conf. {e}"
+            error_message = f"Error: Failed to read or parse ~/configs/imu.conf. {e}"
             print(error_message)
             logging.error(error_message)
 
