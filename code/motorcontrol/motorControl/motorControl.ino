@@ -39,7 +39,7 @@ void loop() {
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
     if (command.length() > 0) {
-      lastCommand = command[0];
+      lastCommand = command;
     }
   }
 
