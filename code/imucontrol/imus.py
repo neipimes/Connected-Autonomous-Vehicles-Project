@@ -14,7 +14,7 @@ from mpu9250_jmdev.registers import *
 from imucontrol.imu import imu
 
 # Configure logging
-logging.basicConfig(filename="~/logs/imu.log", level=logging.INFO, format="%(asctime)s - %(message)s")
+logging.basicConfig(filename=os.path.expanduser("~/logs/imu.log"), level=logging.INFO, format="%(asctime)s - %(message)s")
 
 class CAV_imus:
     mpu1 = MPU9250(address_ak=None, 
