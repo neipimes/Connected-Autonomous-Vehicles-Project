@@ -19,9 +19,11 @@ class motor:
     def setMotorSpeed(speed: int):
         # Set the motor speed. Speed should be between -100 and 100.
         if -100 <= speed <= 100:
+            motor.ser.flush()
             command = f'S{speed}\n'
             logging.info(f"Setting motor speed to {speed}. Command: {command}")
             motor.ser.write(command.encode())
+            motor.ser.flush()
         else:
             logging.error("Invalid speed value of {speed}. Must be between -100 and 100.")
 
@@ -30,6 +32,7 @@ class motor:
         command = 'S0\n'
         logging.info("Stopping motor. Command: S0")
         motor.ser.write(command.encode())
+        motor.ser.flush()
 
     def importConfig():
         # Import the motor configuration from a file located in ~/configs/motor.conf 
