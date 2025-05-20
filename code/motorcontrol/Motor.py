@@ -19,7 +19,7 @@ class motor:
     def setMotorSpeed(speed: int):
         # Set the motor speed. Speed should be between -100 and 100.
         if -100 <= speed <= 100:
-            command = f'S{speed}'
+            command = f'S{speed}\n'
             logging.info(f"Setting motor speed to {speed}. Command: {command}")
             motor.ser.write(command.encode())
         else:
@@ -27,7 +27,7 @@ class motor:
 
     def motorStop():
         # Stop the motor
-        command = 'S0'
+        command = 'S0\n'
         logging.info("Stopping motor. Command: S0")
         motor.ser.write(command.encode())
 
