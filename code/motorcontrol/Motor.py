@@ -3,6 +3,7 @@
 
 import serial
 import logging
+import os
 
 class motor:
     # Class attributes
@@ -12,7 +13,7 @@ class motor:
     ser = None  # Serial object to communicate with onboard arduino
 
     # Initialise logging
-    logging.basicConfig(filename="~/logs/motor.log", level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(filename=os.path.expanduser("~/logs/motor.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logging.info("Motor class initialized.")
 
     def setMotorSpeed(speed: int):
@@ -33,7 +34,7 @@ class motor:
     def importConfig():
         # Import the motor configuration from a file located in ~/configs/motor.conf 
         try:
-            with open("~/configs/motor.conf", "r") as config_file:
+            with open(os.path.expanduser("~/configs/motor.conf"), "r") as config_file:
                 for line in config_file:
                     if line.startswith("port="):
                         motor.port = line.split("=")[1].strip()
@@ -48,7 +49,7 @@ class motor:
     def saveConfig():
         # Save the motor configuration to a file located in ~/configs/motor.conf 
         try:
-            with open("~/configs/motor.conf", "w") as config_file:
+            with open(os.path.expanduser("~/configs/motor.conf"), "w") as config_file:
                 config_file.write(f"port={motor.port}\nbaud={motor.baud}\ntimeout={motor.timeout}")
                 logging.info("Motor configuration saved successfully.")
         except Exception as e:
