@@ -11,7 +11,7 @@ int throttlePin = 9;
 
 float maxSpeed = 95;
 
-char lastCommand = 'S';
+String lastCommand = "S";
 
 void setup() {
   esc.attach(throttlePin);
@@ -46,7 +46,7 @@ void loop() {
   //Serial.print("Median Distance: ");
   //Serial.println(distance);
 
-  if (lastCommand[0] = 'S'){ // Speed command received
+  if (lastCommand[0] == 'S'){ // Speed command received
     if (lastCommand.length() > 1) {
       int speed = lastCommand.substring(1).toInt();
       if (speed >= -100 && speed <= 100) {
