@@ -9,7 +9,8 @@
 Servo esc;
 int throttlePin = 9;
 
-float maxSpeed = 95;
+int mappedSpeed;
+int motorSpeed;
 
 String lastCommand = "S";
 
@@ -48,10 +49,10 @@ void loop() {
 
   if (lastCommand[0] == 'S'){ // Speed command received
     if (lastCommand.length() > 1) {
-      int speed = lastCommand.substring(1).toInt();
-      if (speed >= -100 && speed <= 100) {
-        maxSpeed = map(speed, -100, 100, 0, 180);
-        adjustThrottle(map(maxSpeed, 0, 180, 1000, 2000));
+      int motorSpeed = lastCommand.substring(1).toInt();
+      if (motorSpeed >= -100 && motorSpeed <= 100) {
+        motorSpeed = map(speed, -100, 100, 0, 180);
+        adjustThrottle(map(mappedSpeed, 0, 180, 1000, 2000));
       }
     }
     else {
