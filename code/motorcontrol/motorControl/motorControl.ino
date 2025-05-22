@@ -16,8 +16,8 @@ String lastCommand = "S";
 
 void setup() {
   esc.attach(throttlePin);
-  Serial.begin(115200);
   initializeESC();
+  Serial.begin(115200);
 }
 
 int currentPulseWidth = 1500;
@@ -64,10 +64,10 @@ void loop() {
 }
 
 void initializeESC() {
-  Serial.println("Initializing ESC.");
+  //Serial.println("Initializing ESC.");
   esc.writeMicroseconds(1500);
   delay(7000);
-  Serial.println("ESC is ready!");
+  //Serial.println("ESC is ready!");
 }
 
 void sort(unsigned int arr[], int n) {
