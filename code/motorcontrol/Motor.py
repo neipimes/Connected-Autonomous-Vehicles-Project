@@ -3,7 +3,7 @@
 
 import serial
 import logging
-import os
+import os, time
 
 class motor:
     # Class attributes
@@ -46,8 +46,10 @@ class motor:
                     elif line.startswith("timeout="):
                         motor.timeout = int(line.split("=")[1].strip())
             logging.info("Motor configuration imported successfully.")
+            return True
         except Exception as e:
             logging.error(f"Error importing motor configuration: {e}")
+            return False
         
     def saveConfig():
         # Save the motor configuration to a file located in ~/configs/motor.conf 
@@ -55,13 +57,19 @@ class motor:
             with open(os.path.expanduser("~/configs/motor.conf"), "w") as config_file:
                 config_file.write(f"port={motor.port}\nbaud={motor.baud}\ntimeout={motor.timeout}")
                 logging.info("Motor configuration saved successfully.")
+                return True
         except Exception as e:
             logging.error(f"Error saving motor configuration: {e}")
+            return False
 
     def start():
         # Initialize the serial connection
         try:
             motor.ser = serial.Serial(motor.port, motor.baud, timeout=motor.timeout)
+            # Wait for the serial connection to be established and for ESC to be ready.
+            # This entire function is blocking until the connection is established, 
+            # meaning commands can't be sent until this is done.
+            time.sleep(7)
             logging.info(f"Serial port {motor.port} opened at {motor.baud} baud.")
         except serial.SerialException as e:
             logging.error(f"Error opening serial port: {e}")
@@ -73,5 +81,7 @@ class motor:
         if motor.ser and motor.ser.is_open:
             motor.ser.close()
             logging.info("Serial port closed.")
+            return True
         else:
-            logging.warning("Serial port was not open or already closed.")  
+            logging.warning("Serial port was not open or already closed.")
+            return False
