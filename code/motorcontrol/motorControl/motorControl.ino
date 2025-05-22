@@ -51,7 +51,7 @@ void loop() {
     if (lastCommand.length() > 1) {
       int motorSpeed = lastCommand.substring(1).toInt();
       if (motorSpeed >= -100 && motorSpeed <= 100) {
-        motorSpeed = map(speed, -100, 100, 0, 180);
+        mappedSpeed = map(motorSpeed, -100, 100, 0, 180);
         adjustThrottle(map(mappedSpeed, 0, 180, 1000, 2000));
       }
     }
