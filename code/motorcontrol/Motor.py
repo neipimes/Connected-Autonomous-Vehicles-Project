@@ -66,10 +66,6 @@ class motor:
         # Initialize the serial connection
         try:
             motor.ser = serial.Serial(motor.port, motor.baud, timeout=motor.timeout)
-            # Wait for the serial connection to be established and for ESC to be ready.
-            # This entire function is blocking until the connection is established, 
-            # meaning commands can't be sent until this is done.
-            time.sleep(7)
             logging.info(f"Serial port {motor.port} opened at {motor.baud} baud.")
         except serial.SerialException as e:
             logging.error(f"Error opening serial port: {e}")
