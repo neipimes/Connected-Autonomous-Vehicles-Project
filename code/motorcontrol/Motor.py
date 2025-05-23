@@ -22,10 +22,18 @@ class motor:
             motor.ser.flush()
             command = f'S{speed}\n'
             logging.info(f"Setting motor speed to {speed}. Command: {command}")
-            motor.ser.write(command.encode())
-            motor.ser.flush()
+            for i in range(3):
+                # Send the command to the motor 3 times to ensure it is received.
+                # There are constant inconsistencies with the serial connection, so this is a workaround.
+                if motor.ser.is_open:
+                    logging.info(f"Sending command to motor: {command.strip()}")
+                    motor.ser.write(command.encode())
+                    motor.ser.flush()
+                else:
+                    logging.error("Serial port is not open. Cannot send command.")
+                    return
         else:
-            logging.error("Invalid speed value of {speed}. Must be between -100 and 100.")
+            logging.error(f"Invalid speed value of {speed}. Must be between -100 and 100.")
 
     def motorStop():
         # Stop the motor
@@ -66,6 +74,7 @@ class motor:
         # Initialize the serial connection
         try:
             motor.ser = serial.Serial(motor.port, motor.baud, timeout=motor.timeout)
+            time.sleep(8) # Wait for the serial connection to fully initialise.
             logging.info(f"Serial port {motor.port} opened at {motor.baud} baud.")
         except serial.SerialException as e:
             logging.error(f"Error opening serial port: {e}")
