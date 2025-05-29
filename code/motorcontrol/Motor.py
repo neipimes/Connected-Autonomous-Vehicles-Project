@@ -26,7 +26,14 @@ class motor:
             motor.motorStop()
             # Wait for a short period to ensure the motor stops before sending the new speed command.
             time.sleep(0.1)
-            for i in range(3):
+            if motor.ser.is_open:
+                logging.info(f"Sending command to motor: {command.strip()}")
+                motor.ser.write(command.encode())
+                motor.ser.flush()
+            else:
+                logging.error("Serial port is not open. Cannot send command.")
+                return
+            '''for i in range(3):
                 # Send the command to the motor 3 times to ensure it is received.
                 # There are constant inconsistencies with the serial connection, so this is a workaround.
                 if motor.ser.is_open:
@@ -36,7 +43,7 @@ class motor:
                 else:
                     logging.error("Serial port is not open. Cannot send command.")
                     return
-                #time.sleep(0.1)
+                #time.sleep(0.1)'''
         else:
             logging.error(f"Invalid speed value of {speed}. Must be between -100 and 100.")
 
