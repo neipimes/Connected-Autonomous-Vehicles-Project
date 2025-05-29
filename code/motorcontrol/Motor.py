@@ -25,7 +25,7 @@ class motor:
             # Before we send a new speed command, we need to stop the motor first.
             motor.motorStop()
             # Wait for a short period to ensure the motor stops before sending the new speed command.
-            time.sleep(0.1)
+            #time.sleep(0.1)
             if motor.ser.is_open:
                 logging.info(f"Sending command to motor: {command.strip()}")
                 motor.ser.write(command.encode())
