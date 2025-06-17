@@ -30,21 +30,17 @@ class motor:
                 logging.info(f"Sending command to motor: {command.strip()}")
                 motor.ser.write(command.encode())
                 motor.ser.flush()
-            else:
-                logging.error("Serial port is not open. Cannot send command.")
-                return
-            '''for i in range(3):
-                # Send the command to the motor 3 times to ensure it is received.
-                # There are constant inconsistencies with the serial connection, so this is a workaround.
-                if motor.ser.is_open:
-                    logging.info(f"Sending command to motor: {command.strip()}")
+        
+                if speed < 0: # Changing the motor direction to reverse has some technicalities, so we need to handle it separately.
+                    # The initial command changes the state in the ESC, with the second command sending the speed.
+                    logging.info(f"Motor set to reverse, sending speed command {command.strip()} after state change.")
+                    time.sleep(0.5)  
                     motor.ser.write(command.encode())
                     motor.ser.flush()
-                else:
-                    logging.error("Serial port is not open. Cannot send command.")
-                    return
-                #time.sleep(0.1)'''
-        else:
+            
+            else:
+                logging.error("Serial port is not open. Cannot send command.")
+          else:
             logging.error(f"Invalid speed value of {speed}. Must be between -100 and 100.")
 
     def motorStop():
@@ -89,8 +85,12 @@ class motor:
             time.sleep(8) # Wait for the serial connection to fully initialise.
             logging.info(f"Serial port {motor.port} opened at {motor.baud} baud.")
         except serial.SerialException as e:
-            logging.error(f"Error opening serial port: {e}")
-            return False
+            if motor.ser and motor.ser.is_open: # If the serial port is already open, we can assume the motor is already connected.
+                logging.info("Serial port already open. Connected to motor.")
+                return True
+            else:
+                logging.error(f"Error opening serial port: {e}")
+                return False
         return True
     
     def close():
