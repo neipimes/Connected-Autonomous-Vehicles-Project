@@ -40,7 +40,7 @@ class motor:
             
             else:
                 logging.error("Serial port is not open. Cannot send command.")
-          else:
+        else:
             logging.error(f"Invalid speed value of {speed}. Must be between -100 and 100.")
 
     def motorStop():
