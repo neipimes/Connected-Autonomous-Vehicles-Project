@@ -81,7 +81,6 @@ class PSTracker:
                 self.xLocation = xDisplacement
                 self.yLocation = yDisplacement
                 self.angle = angleValue
-            
 
 
     def start(self):
@@ -136,8 +135,3 @@ class PSTracker:
                 self.xLocation = results["x"]
                 self.yLocation = results["y"]
                 self.angle = results["angle"]
-
-
-            
-
-        
