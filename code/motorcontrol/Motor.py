@@ -22,25 +22,25 @@ class motor:
             motor.ser.flush()
             command = f'S{speed}\n'
             logging.info(f"Setting motor speed to {speed}. Command: {command}")
-            for i in range(3):
-                # Send the command to the motor 3 times to ensure it is received.
-                # There are constant inconsistencies with the serial connection, so this is a workaround.
-                if motor.ser.is_open:
-                    logging.info(f"Sending command to motor: {command.strip()}")
-                    motor.ser.write(command.encode())
-                    motor.ser.flush()
-                else:
-                    logging.error("Serial port is not open. Cannot send command.")
-                    return
-                time.sleep(0.5)
-
-            if speed < 0: # Changing the motor direction to reverse has some technicalities, so we need to handle it separately.
-                # The initial command changes the state in the ESC, with the second command sending the speed.
-                logging.info(f"Motor set to reverse, sending speed command {command.strip()} after state change.")
+            # Before we send a new speed command, we need to stop the motor first.
+            motor.motorStop()
+            # Wait for a short period to ensure the motor stops before sending the new speed command.
+            #time.sleep(0.1)
+            if motor.ser.is_open:
+                logging.info(f"Sending command to motor: {command.strip()}")
                 motor.ser.write(command.encode())
                 motor.ser.flush()
         
-        else:
+                if speed < 0: # Changing the motor direction to reverse has some technicalities, so we need to handle it separately.
+                    # The initial command changes the state in the ESC, with the second command sending the speed.
+                    logging.info(f"Motor set to reverse, sending speed command {command.strip()} after state change.")
+                    time.sleep(0.5)  
+                    motor.ser.write(command.encode())
+                    motor.ser.flush()
+            
+            else:
+                logging.error("Serial port is not open. Cannot send command.")
+          else:
             logging.error(f"Invalid speed value of {speed}. Must be between -100 and 100.")
 
     def motorStop():

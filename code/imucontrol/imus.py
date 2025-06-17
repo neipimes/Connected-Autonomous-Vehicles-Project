@@ -11,10 +11,10 @@ import logging
 import numpy as np
 from mpu9250_jmdev.mpu_9250 import MPU9250
 from mpu9250_jmdev.registers import *
-from imu import imu
+from imucontrol.imu import imu
 
 # Configure logging
-logging.basicConfig(filename="imu.log", level=logging.INFO, format="%(asctime)s - %(message)s")
+logging.basicConfig(filename=os.path.expanduser("~/logs/imu.log"), level=logging.INFO, format="%(asctime)s - %(message)s")
 
 class CAV_imus:
     mpu1 = MPU9250(address_ak=None, 
@@ -56,14 +56,19 @@ class CAV_imus:
         mode=None)
     
     # Forward and Left: Positive values. Back and Right: Negative values.
-    imu1 = imu("Front", mpu1, [0, 0, 0], 0, 1, -1, -1) # Front IMU
+    imu1 = imu("Front", mpu1, [0, 0, 0], [0, 0, 0], 0, 1, -1, -1) # Front IMU
     imu2 = None # This IMU is not used in the current configuration
-    imu3 = imu("Left", mpu3, [0, 0, 0], 1, 0, 1, -1) # Left IMU
-    imu4 = imu("Right", mpu4, [0, 0, 0], 1, 0, -1, 1) # Right IMU
-    imu5 = imu("Back", mpu5, [0, 0, 0], 0, 1, 1, 1) # Back IMU
+    imu3 = imu("Left", mpu3, [0, 0, 0], [0, 0, 0], 1, 0, 1, -1) # Left IMU
+    imu4 = imu("Right", mpu4, [0, 0, 0], [0, 0, 0], 1, 0, -1, 1) # Right IMU
+    imu5 = imu("Back", mpu5, [0, 0, 0], [0, 0, 0], 0, 1, 1, 1) # Back IMU
 
-    imuList = [imu1, imu2, imu3, imu4, imu5]
+    imuList = [imu1, imu3, imu4, imu5]
     imuAliases = {"Front": imu1, "Back": imu5, "Left": imu3, "Right": imu4}
+
+    # Track the IMUs that have the lowest acceleration noise values for each axis
+    # This is used to determine which IMU to use for each axis when calculating the average data.
+    imuFB = None
+    imuLR = None
 
     def logIMUConfiguration(imu_name, gfs=None, afs=None, abias=None, gbias=None):
         log_message = f"{imu_name} configuration updated:"
@@ -75,8 +80,30 @@ class CAV_imus:
             log_message += f" Gyroscope Bias: {gbias};"
         logging.info(log_message)
 
+    def updateLowestNoiseIMUs():
+        # Determine and assign the IMUs with the lowest acceleration noise values for FB and LR axes
+        try:
+            lowestFBNoise = float('inf')
+            lowestLRNoise = float('inf')
+            CAV_imus.imuFB = None
+            CAV_imus.imuLR = None
+
+            for imu_obj in CAV_imus.imuList:
+                if imu_obj is not None:
+                    if imu_obj.getFBAcellNoise() < lowestFBNoise:  # Assuming index 0 corresponds to FB axis
+                        lowestFBNoise = imu_obj.getFBAcellNoise()
+                        CAV_imus.imuFB = imu_obj
+                    if imu_obj.getLRAcellNoise() < lowestLRNoise:  # Assuming index 1 corresponds to LR axis
+                        lowestLRNoise = imu_obj.getLRAcellNoise()
+                        CAV_imus.imuLR = imu_obj
+
+            logging.info(f"IMU with lowest FB noise: {CAV_imus.imuFB.pos if CAV_imus.imuFB else 'None'}")
+            logging.info(f"IMU with lowest LR noise: {CAV_imus.imuLR.pos if CAV_imus.imuLR else 'None'}")
+        except Exception as e:
+            logging.error(f"Error updating lowest noise IMUs: {e}")
+
     def calibrateAll(numOfSamples):
-        # Calibrate all IMUs in the imuList which are not None, averaging the middle 99% of the returned a and g bias values across numOfSamples
+        # Calibrate all IMUs in the imuList which are not None, averaging the middle 95% of the returned a and g bias values across numOfSamples
         try:
             for imu_obj in CAV_imus.imuList:
                 if imu_obj is not None:
@@ -92,17 +119,17 @@ class CAV_imus:
                     aBiasSamples = np.array(aBiasSamples)
                     gBiasSamples = np.array(gBiasSamples)
 
-                    # Calculate the middle 99% range for each axis
+                    # Calculate the middle 95% range for each axis
                     avgABias = []
                     avgGBias = []
                     aBiasNoise = []
                     gBiasNoise = []
 
                     for axis in range(3):  # Iterate over x, y, z axes
-                        aBiasFiltered = np.percentile(aBiasSamples[:, axis], [0.5, 99.5])
-                        gBiasFiltered = np.percentile(gBiasSamples[:, axis], [0.5, 99.5])
+                        aBiasFiltered = np.percentile(aBiasSamples[:, axis], [0.5, 95.5])
+                        gBiasFiltered = np.percentile(gBiasSamples[:, axis], [0.5, 95.5])
 
-                        # Average the middle 99% values for this axis
+                        # Average the middle 95% values for this axis
                         avgABias.append(np.mean(aBiasSamples[(aBiasSamples[:, axis] >= aBiasFiltered[0]) & 
                                                               (aBiasSamples[:, axis] <= aBiasFiltered[1]), axis]))
                         avgGBias.append(np.mean(gBiasSamples[(gBiasSamples[:, axis] >= gBiasFiltered[0]) & 
@@ -131,21 +158,28 @@ class CAV_imus:
                         gbias=imu_obj.mpu.gbias
                     )
 
+            # Update the IMUs with the lowest noise values
+            CAV_imus.updateLowestNoiseIMUs()
+
             # Save bias data and noise to imu.conf
             CAV_imus.saveConfig()
         except Exception as e:
             logging.error(f"Error during calibration: {e}")
 
     def saveConfig():
-        # Save IMU configuration, biases, noise values, and aliases to imu.conf
+        # Save IMU configuration, biases, noise values, and aliases to ~/configs/imu.conf
         try:
-            with open("imu.conf", "w") as file:
+            config_path = os.path.expanduser("~/configs/imu.conf")
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, "w") as file:
                 for idx, imu_obj in enumerate(CAV_imus.imuList):
                     if imu_obj is not None:
                         # Save IMU creation information
                         file.write(f"IMU{idx + 1} Position: {imu_obj.pos}\n")
-                        file.write(f"IMU{idx + 1} FB Index: {imu_obj.fbIndex}, LR Index: {imu_obj.lrIndex}\n")
-                        file.write(f"IMU{idx + 1} FB Mod: {imu_obj.fbMod}, LR Mod: {imu_obj.lrMod}\n")
+                        file.write(f"IMU{idx + 1} FB Index: {imu_obj.fbIndex}\n")
+                        file.write(f"IMU{idx + 1} LR Index: {imu_obj.lrIndex}\n")
+                        file.write(f"IMU{idx + 1} FB Mod: {imu_obj.fbMod}\n")
+                        file.write(f"IMU{idx + 1} LR Mod: {imu_obj.lrMod}\n")
                         # Save bias and noise values
                         file.write(f"IMU{idx + 1} Accelerometer Bias: {imu_obj.mpu.abias}\n")
                         file.write(f"IMU{idx + 1} Gyroscope Bias: {imu_obj.mpu.gbias}\n")
@@ -155,20 +189,21 @@ class CAV_imus:
                 file.write("IMU Aliases:\n")
                 for alias, imu_obj in CAV_imus.imuAliases.items():
                     file.write(f"{alias}: IMU{CAV_imus.imuList.index(imu_obj) + 1}\n")
-            logging.info("IMU configuration and aliases saved to imu.conf.")
+            logging.info("IMU configuration and aliases saved to ~/configs/imu.conf.")
         except Exception as e:
             logging.error(f"Error saving configuration: {e}")
 
     def importSavedConfig():
-        # Import IMU configuration, biases, noise values, and aliases from imu.conf
-        if not os.path.exists("imu.conf"):
-            error_message = "Error: imu.conf file not found."
+        # Import IMU configuration, biases, noise values, and aliases from ~/configs/imu.conf
+        config_path = os.path.expanduser("~/configs/imu.conf")
+        if not os.path.exists(config_path):
+            error_message = "Error: ~/configs/imu.conf file not found."
             print(error_message)
             logging.error(error_message)
             return
-
+        
         try:
-            with open("imu.conf", "r") as file:
+            with open(config_path, "r") as file:
                 lines = file.readlines()
 
             CAV_imus.imuAliases = {}
@@ -176,13 +211,15 @@ class CAV_imus:
                 if imu_obj is not None:
                     try:
                         # Parse IMU creation information
-                        posLine = lines[idx * 7].strip()
-                        fbIndexLine = lines[idx * 7 + 1].strip()
-                        fbModLine = lines[idx * 7 + 2].strip()
-                        aBiasLine = lines[idx * 7 + 3].strip()
-                        gBiasLine = lines[idx * 7 + 4].strip()
-                        aNoiseLine = lines[idx * 7 + 5].strip()
-                        gNoiseLine = lines[idx * 7 + 6].strip()
+                        posLine = lines[idx * 9].strip()
+                        fbIndexLine = lines[idx * 9 + 1].strip()
+                        lrIndexLine = lines[idx * 9 + 2].strip()
+                        fbModLine = lines[idx * 9 + 3].strip()
+                        lrModLine = lines[idx * 9 + 4].strip()
+                        aBiasLine = lines[idx * 9 + 5].strip()
+                        gBiasLine = lines[idx * 9 + 6].strip()
+                        aNoiseLine = lines[idx * 9 + 7].strip()
+                        gNoiseLine = lines[idx * 9 + 8].strip()
 
                         # Extract position
                         if "Position:" in posLine:
@@ -191,20 +228,26 @@ class CAV_imus:
                             raise ValueError("Invalid position format.")
 
                         # Extract FB and LR indices
-                        if "FB Index:" in fbIndexLine and "LR Index:" in fbIndexLine:
-                            indices = fbIndexLine.split(":")[1].strip().split(", ")
-                            imu_obj.fbIndex = int(indices[0].split()[0])
-                            imu_obj.lrIndex = int(indices[1].split()[0])
+                        if "FB Index:" in fbIndexLine:
+                            imu_obj.fbIndex = int(fbIndexLine.split(":")[1].strip())
                         else:
-                            raise ValueError("Invalid FB/LR index format.")
+                            raise ValueError("Invalid FB index format.")
+
+                        if "LR Index:" in lrIndexLine:
+                            imu_obj.lrIndex = int(lrIndexLine.split(":")[1].strip())
+                        else:
+                            raise ValueError("Invalid LR index format.")
 
                         # Extract FB and LR modifiers
-                        if "FB Mod:" in fbModLine and "LR Mod:" in fbModLine:
-                            mods = fbModLine.split(":")[1].strip().split(", ")
-                            imu_obj.fbMod = int(mods[0].split()[0])
-                            imu_obj.lrMod = int(mods[1].split()[0])
+                        if "FB Mod:" in fbModLine:
+                            imu_obj.fbMod = int(fbModLine.split(":")[1].strip())
                         else:
-                            raise ValueError("Invalid FB/LR modifier format.")
+                            raise ValueError("Invalid FB modifier format.")
+
+                        if "LR Mod:" in lrModLine:
+                            imu_obj.lrMod = int(lrModLine.split(":")[1].strip())
+                        else:
+                            raise ValueError("Invalid LR modifier format.")
 
                         # Parse accelerometer bias
                         if "Accelerometer Bias:" in aBiasLine:
@@ -229,7 +272,7 @@ class CAV_imus:
                             gNoise = list(map(float, gNoiseLine.split(":")[1].strip(" []").split(",")))
                         else:
                             raise ValueError("Invalid gyroscope noise format.")
-
+                        
                         # Apply biases to MPU9250
                         imu_obj.mpu.abias = aBias
                         imu_obj.mpu.gbias = gBias
@@ -251,18 +294,25 @@ class CAV_imus:
                         print(error_message)
                         logging.error(error_message)
 
+            # Update the IMUs with the lowest noise values
+            CAV_imus.updateLowestNoiseIMUs()
+
             # Parse imuAliases
-            aliasStartIndex = len(CAV_imus.imuList) * 7
+            aliasStartIndex = len(CAV_imus.imuList) * 9
             for line in lines[aliasStartIndex:]:
                 if "IMU Aliases:" in line:
                     continue
                 alias, imuRef = line.strip().split(":")
                 alias = alias.strip()
                 imuIndex = int(imuRef.strip().split("IMU")[1]) - 1
-                CAV_imus.imuAliases[alias] = CAV_imus.imuList[imuIndex]
-            logging.info("IMU configuration and aliases imported from imu.conf.")
+                CAV_imus.imuAliases[alias] = CAV_imus.imuList[imuIndex] # TODO: Removing imu2 from imuList causes a fuck up here where imu5 is not added to the aliases.
+                # E.g. IMU5 is in index 3, not index 4 as it would be if index 1 didn't contain IMU3.
+                # TODO: Could have the second entry be None in the base global imuList, and then drop the None values when enumerating in above loop.
+                # This means we could still have working alias matching here.
+            logging.info("IMU configuration and aliases imported from ~/configs/imu.conf.")
+
         except Exception as e:
-            error_message = f"Error: Failed to read or parse imu.conf. {e}"
+            error_message = f"Error: Failed to read or parse ~/configs/imu.conf. {e}"
             print(error_message)
             logging.error(error_message)
 
@@ -277,6 +327,16 @@ class CAV_imus:
         allAccLRNoise = []
         allTurnAngleData = []
         allTurnAngleNoise = []
+
+        # TODO: May have to restructure this to grab the data for each axis in the same loop to avoid 
+        #       measurements being read out of sync from each other.
+        #       This means the individual axes will be slightly more out of sync, but individual axis
+        #       accuracy will increase.
+
+        # TODO: Averaging across all IMUs is not perfect, as the measurement of the most reliable IMU should be enough to determine an accurate values.
+        #       This is different for the turn angle, where averaging does seem to make the result more accurate (Noise is more random).
+        #       For acceleration, using the most reliable (or top 2) IMU(s) should be enough to determine an accurate value. Could be worse over longer periods of time however.
+        
         for imu_obj in CAV_imus.imuList:
             if imu_obj is not None:
                 allAccFBData.append(imu_obj.getFBAccelData())

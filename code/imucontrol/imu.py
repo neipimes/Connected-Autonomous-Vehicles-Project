@@ -7,6 +7,18 @@ from mpu9250_jmdev.registers import *
 
 class imu:
     def __init__(self, pos: str, mpu: MPU9250, aNoiseVals: list, gNoiseVals: list, fbIndex: int, lrIndex: int, fbMod: int, lrMod: int):
+        # Validate fbMod and lrMod
+        if fbMod not in [-1, 1]:
+            raise ValueError(f"Invalid fbMod value: {fbMod}. Must be 1 or -1.")
+        if lrMod not in [-1, 1]:
+            raise ValueError(f"Invalid lrMod value: {lrMod}. Must be 1 or -1.")
+
+        # Validate fbIndex and lrIndex
+        if fbIndex not in [0, 1, 2]:
+            raise ValueError(f"Invalid fbIndex value: {fbIndex}. Must be 0, 1, or 2.")
+        if lrIndex not in [0, 1, 2]:
+            raise ValueError(f"Invalid lrIndex value: {lrIndex}. Must be 0, 1, or 2.")
+
         self.pos = pos
         self.mpu = mpu
         self.aNoiseVals = aNoiseVals

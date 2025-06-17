@@ -57,12 +57,12 @@ void loop() {
   if (lastCommand[0] == 'S'){ // Speed command received. A non speed command will be ignored with CAV speed preserved.
     if (lastCommand.length() > 1) {
       int motorSpeed = lastCommand.substring(1).toInt();
-      Serial.println("Motor speed: " + String(motorSpeed));
+      //Serial.println("Motor speed: " + String(motorSpeed));
       if (motorSpeed >= -100 && motorSpeed <= 100) {
         mappedSpeed = map(motorSpeed, -100, 100, 0, 180);
-        Serial.println("Mapped speed: " + String(mappedSpeed));
+        //Serial.println("Mapped speed: " + String(mappedSpeed));
         throttleSpeed = map(mappedSpeed, 0, 180, 1000, 2000);
-        Serial.println("Throttle Speed: " + String(throttleSpeed));
+        //Serial.println("Throttle Speed: " + String(throttleSpeed));
         adjustThrottle(throttleSpeed);
       }
     }
