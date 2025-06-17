@@ -33,6 +33,13 @@ class motor:
                     logging.error("Serial port is not open. Cannot send command.")
                     return
                 time.sleep(0.5)
+
+            if speed < 0: # Changing the motor direction to reverse has some technicalities, so we need to handle it separately.
+                # The initial command changes the state in the ESC, with the second command sending the speed.
+                logging.info(f"Motor set to reverse, sending speed command {command.strip()} after state change.")
+                motor.ser.write(command.encode())
+                motor.ser.flush()
+        
         else:
             logging.error(f"Invalid speed value of {speed}. Must be between -100 and 100.")
 
@@ -78,8 +85,12 @@ class motor:
             time.sleep(8) # Wait for the serial connection to fully initialise.
             logging.info(f"Serial port {motor.port} opened at {motor.baud} baud.")
         except serial.SerialException as e:
-            logging.error(f"Error opening serial port: {e}")
-            return False
+            if motor.ser and motor.ser.is_open: # If the serial port is already open, we can assume the motor is already connected.
+                logging.info("Serial port already open. Connected to motor.")
+                return True
+            else:
+                logging.error(f"Error opening serial port: {e}")
+                return False
         return True
     
     def close():
