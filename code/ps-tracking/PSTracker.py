@@ -45,6 +45,16 @@ class PSTracker:
         Angle: Yaw (rotation around the vertical axis)
         """
 
+        """
+        TODO: Due to how the IMUs are mounted, X and Y values may not be representative of where the CAV actually is.
+        Possibly might have to fall back onto the FB axis + angle to set an acceleration/displacement vector, which in turn can be used to
+        give more accurate X and Y values. This values get fed into other parts of the tracker, with the LR axis possibly
+        used as a complementary filter to particle adjustments to 90 degrees either side of the displacement vector.
+        LR axis could possibly be used as a complimentary filter to angle readings as well, as there is no doubt a relationship
+        betweeen the magnitude of an angle change and the magnitude of a reading on the LR axis due to centripital force.
+        """
+
+
         GRAVITY = 9.80665 # m/s^2, standard gravity
 
         xVelocity = 0.0
@@ -57,24 +67,31 @@ class PSTracker:
 
         startTime = time.time()
         currentRunningTime = 0.0
+
         while True:
             data = imus.getAvgData()
             priorRunningTime = copy.copy(currentRunningTime)
             currentRunningTime = time.time() - startTime
             timestep = currentRunningTime - priorRunningTime
 
+            # Forward/Back: data[0], Left/Right: data[1], Angle change: data[2]
             data[0] = data[0] * GRAVITY  # Convert acceleration to m/s^2
             data[1] = data[1] * GRAVITY  # Convert acceleration to m/s^2
+            
+            # Adjust angle by the angle change and normalize angle to (0, 360)
+            angleValue = angleValue + data[2] * timestep  # degrees
+            angleValue = np.mod(angleValue, 360)
+
+            # Use FB measurement and angle to get approximate location change. 
+            # TODO: LR measurement could also be used for a complementary filter for angle measurement.
+            xDelta = data[0] * np.sin(np.radians(angleValue))
+            yDelta = data[0] * np.cos(np.radians(angleValue))
 
             # Do calculations for accelerometer and gyroscope data
-            xDisplacement = xVelocity * timestep + 0.5 * data[1] * timestep**2
-            yDisplacement = yVelocity * timestep + 0.5 * data[0] * timestep**2
-            xVelocity = xVelocity + data[1] * timestep  # m/s
-            yVelocity = yVelocity + data[0] * timestep
-
-            angleValue = angleValue + data[2] * timestep  # degrees
-            # Normalize angle to [0, 360)
-            angleValue = np.mod(angleValue, 360)
+            xDisplacement = xVelocity * timestep + 0.5 * xDelta * timestep**2
+            yDisplacement = yVelocity * timestep + 0.5 * yDelta * timestep**2
+            xVelocity = xVelocity + xDelta * timestep  # m/s
+            yVelocity = yVelocity + yDelta * timestep
 
             # Update imu readings in class
             with self.mutex:
@@ -118,8 +135,8 @@ class PSTracker:
                 w=self.w,
                 c1=self.c1,
                 c2=self.c2,
-                oldLidarScan=priorScan,  # Use the current scan as the old scan
-                newLidarScan=lidar_scan,  # For simplicity, use the same scan as new
+                oldLidarScan=priorScan,
+                newLidarScan=lidar_scan,
                 sections=self.sections,
                 imuXReading=imuXReading,
                 imuYReading=imuYReading,
