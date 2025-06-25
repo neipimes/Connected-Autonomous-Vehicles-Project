@@ -59,7 +59,7 @@ class PSO:
             iterCount += 1
             for particle in self.particles:
                 # Update particle velocity and position
-                particle.updateVelocity(self.best_particle, self.w, self.c1, self.c2) # TODO: These particle functions
+                particle.updateVelocity(self.best_particle, self.w, self.c1, self.c2)
                 particle.updatePosition()
                 # Calculate cost for the new position
                 cost = particle.calcCost(self.oldLidarScan, self.newLidarScan, self.sections)
