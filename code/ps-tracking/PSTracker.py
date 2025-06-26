@@ -6,6 +6,8 @@ from rplidar import RPLidar
 import multiprocessing as mp
 import time, copy, logging, os
 
+# Start logging using the logging directory in home directory.
+logging.basicConfig(filename=os.path.expanduser("~/logs/pstracker.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class PSTracker:
     def __init__(self, swarmSize: int, w: float, c1: float, c2: float, sections: int = 16, targetTime: float = 1/15):
@@ -19,9 +21,7 @@ class PSTracker:
         :param targetTime: Target time for the tracking loop.
         """
 
-        # Start logging using the logging directory in home directory.
-        logging.basicConfig(filename=os.path.expanduser("~/logs/pstracker.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
+        
         self.swarmSize = swarmSize
         self.w = w
         self.c1 = c1
@@ -83,17 +83,17 @@ class PSTracker:
             timestep = currentRunningTime - priorRunningTime
 
             # Forward/Back: data[0], Left/Right: data[1], Angle change: data[2]
-            data[0] = data[0] * GRAVITY  # Convert acceleration to m/s^2
-            data[1] = data[1] * GRAVITY  # Convert acceleration to m/s^2
-            
+            fbData = data[0] * GRAVITY  # Convert acceleration to m/s^2
+            lrData = data[1] * GRAVITY  # Convert acceleration to m/s^2
+
             # Adjust angle by the angle change and normalize angle to (0, 360)
             angleValue = angleValue + data[2] * timestep  # degrees
             angleValue = np.mod(angleValue, 360)
 
             # Use FB measurement and angle to get approximate location change. 
             # TODO: LR measurement could also be used for a complementary filter for angle measurement.
-            xDelta = data[0] * np.sin(np.radians(angleValue))
-            yDelta = data[0] * np.cos(np.radians(angleValue))
+            xDelta = fbData * np.sin(np.radians(angleValue))
+            yDelta = fbData * np.cos(np.radians(angleValue))
 
             # Do calculations for accelerometer and gyroscope data
             xDisplacement = xVelocity * timestep + 0.5 * xDelta * timestep**2
@@ -176,7 +176,6 @@ class PSTracker:
         """
         Close the PSTracker and stop the IMU readings.
         """
-        imus.stop()
         self.lidar.stop()
         self.lidar.disconnect()
         logging.info("PSTracker closed and resources released.")
