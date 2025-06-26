@@ -39,7 +39,7 @@ class PSTracker:
 
         # Initialize IMU and Lidar
         imus.start()
-        self.lidar = RPLidar('/dev/ttyUSB0') #TODO: Add adjustability for lidar port. Config file?
+        self.lidar = RPLidar('/dev/ttyUSB0', baudrate=256000) #TODO: Add adjustability for lidar port. Config file?
         if self.lidar is None:
             logging.error("Failed to connect to LiDAR. Please check the connection.")
             raise ConnectionError("LiDAR connection failed.")
@@ -47,7 +47,6 @@ class PSTracker:
         
         logging.info("LiDAR and IMUs initialised successfully.")
         logging.info(f"PSTracker initialized with swarmSize={swarmSize}, w={w}, c1={c1}, c2={c2}, sections={sections}, targetTime={targetTime}.")
-        
 
     def runIMUReadings(self):
         """
