@@ -46,11 +46,9 @@ class PSTracker:
         """
 
         """
-        TODO: Due to how the IMUs are mounted, X and Y values may not be representative of where the CAV actually is.
-        Possibly might have to fall back onto the FB axis + angle to set an acceleration/displacement vector, which in turn can be used to
-        give more accurate X and Y values. This values get fed into other parts of the tracker, with the LR axis possibly
-        used as a complementary filter to particle adjustments to 90 degrees either side of the displacement vector.
-        LR axis could possibly be used as a complimentary filter to angle readings as well, as there is no doubt a relationship
+        TODO: The LR axis could possibly be used as a complementary filter to particle adjustments 
+        to 90 degrees either side of the displacement vector.
+        LR axis could also possibly be used as a complimentary filter to angle readings as well, as there is no doubt a relationship
         betweeen the magnitude of an angle change and the magnitude of a reading on the LR axis due to centripital force.
         """
 
@@ -69,7 +67,7 @@ class PSTracker:
         currentRunningTime = 0.0
 
         while True:
-            data = imus.getAvgData()
+            data = imus.getAvgData() # Blocking call to get IMU data
             priorRunningTime = copy.copy(currentRunningTime)
             currentRunningTime = time.time() - startTime
             timestep = currentRunningTime - priorRunningTime
@@ -100,7 +98,7 @@ class PSTracker:
                 self.angle = angleValue
 
 
-    def start(self):
+    def start(self, useOriginScan: bool = False):
         """ 
         Start the PSTracker to continuously track the particle swarm.
         """
@@ -117,7 +115,7 @@ class PSTracker:
 
             # Check if this is the first scan
             if priorScan is None:
-                # Store the first scan as the initial scan
+                # Store the first scan as the initial scan and continue to next iteration
                 priorScan = lidar_scan
                 originScan = lidar_scan
                 continue
@@ -129,6 +127,10 @@ class PSTracker:
                 imuAngleReading = self.angle
 
             # Create a PSO instance with the current lidar scan and IMU readings
+            if useOriginScan:
+                # Use the original scan as the prior scan
+                priorScan = originScan
+
             pso = PSO(
                 swarmSize=self.swarmSize,
                 w=self.w,
