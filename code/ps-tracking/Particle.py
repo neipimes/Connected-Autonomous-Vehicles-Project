@@ -81,8 +81,8 @@ class Particle:
         distances = distances[valid_mask]
 
         # Convert polar to Cartesian in robot frame
-        x_robot = distances * np.cos(np.radians(angles))
-        y_robot = distances * np.sin(np.radians(angles))
+        x_robot = distances * np.sin(np.radians(angles)) # Sine and cosine are swapped here to match the polar lidar coordinate system.
+        y_robot = distances * np.cos(np.radians(angles))
 
         # Transform to particle frame: translate by -self.x, -self.y
         x_trans = x_robot - self.x
