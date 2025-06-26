@@ -387,5 +387,11 @@ class CAV_imus:
 
     def start():
         # Setup function to be run to initialise the IMUs.
-        # Currently will only run the importSavedConfig function to load the bias values from the imu.conf file.
+        
+        config_path = os.path.expanduser("~/configs/imu.conf")
+        if not os.path.exists(config_path):
+            # Run an initial calibration and save to ~/configs/imu.conf
+            logging.info("imu.conf not found. Running initial calibration and saving configuration.")
+            CAV_imus.calibrateAll(50)
+
         CAV_imus.importSavedConfig()
