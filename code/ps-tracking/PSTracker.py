@@ -199,7 +199,6 @@ class PSTracker:
 
 
 
-# TODO: Make a main function for testing purposes.
 def main():
     try:
         tracker = PSTracker(swarmSize=10, w=0.5, c1=1.5, c2=1.5, sections=16, targetTime=1/15)
