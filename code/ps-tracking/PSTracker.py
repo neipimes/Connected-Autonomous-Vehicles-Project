@@ -38,7 +38,7 @@ class PSTracker:
         # Initialize IMU and Lidar
         imus.start()
         self.lidar = RPLidar('/dev/ttyUSB0') #TODO: Add adjustability for lidar port. Config file?
-        if not self.lidar.is_connected:
+        if self.lidar is None:
             logging.error("Failed to connect to LiDAR. Please check the connection.")
             raise ConnectionError("LiDAR connection failed.")
         # Lidar starts on initialization, so we don't need to call start() here.
