@@ -108,7 +108,7 @@ class PSTracker:
                 self.angle = angleValue
 
 
-    def start(self, useOriginScan: bool = False):
+    def start(self, useOriginScan: bool = False, debug: bool = False):
         """ 
         Start the PSTracker to continuously track the particle swarm.
         """
@@ -168,6 +168,10 @@ class PSTracker:
                 self.yLocation = results["y"]
                 self.angle = results["angle"]
 
+            # Debugging output
+            if debug:
+                print(f"PSO Results: X={self.xLocation:.2f}, Y={self.yLocation:.2f}, Angle={self.angle:.2f}")
+
     def close(self):
         """
         Close the PSTracker and stop the IMU readings.
@@ -178,4 +182,17 @@ class PSTracker:
         logging.info("PSTracker closed and resources released.")
 
 
-    # TODO: Make a main function for testing purposes.
+
+# TODO: Make a main function for testing purposes.
+def main():
+    try:
+        tracker = PSTracker(swarmSize=10, w=0.5, c1=1.5, c2=1.5, sections=16, targetTime=1/15)
+        tracker.start(useOriginScan = False, debug=True)
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+    finally:
+        tracker.close()
+        logging.info("PSTracker has been closed successfully.")
+
+if __name__ == "__main__":
+    main()
