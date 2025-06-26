@@ -4,7 +4,7 @@ from PSO import PSO
 import numpy as np
 from rplidar import RPLidar
 import multiprocessing as mp
-import time, copy
+import time, copy, logging, os
 
 
 class PSTracker:
@@ -18,6 +18,9 @@ class PSTracker:
         :param sections: Number of sections for lidar scan comparison.
         :param targetTime: Target time for the tracking loop.
         """
+
+        # Start logging using the logging directory in home directory.
+        logging.basicConfig(filename=os.path.expanduser("~/logs/pstracker.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
         self.swarmSize = swarmSize
         self.w = w
@@ -35,6 +38,14 @@ class PSTracker:
         # Initialize IMU and Lidar
         imus.start()
         self.lidar = RPLidar('/dev/ttyUSB0') #TODO: Add adjustability for lidar port. Config file?
+        if not self.lidar.is_connected:
+            logging.error("Failed to connect to LiDAR. Please check the connection.")
+            raise ConnectionError("LiDAR connection failed.")
+        # Lidar starts on initialization, so we don't need to call start() here.
+        
+        logging.info("LiDAR and IMUs initialised successfully.")
+        logging.info(f"PSTracker initialized with swarmSize={swarmSize}, w={w}, c1={c1}, c2={c2}, sections={sections}, targetTime={targetTime}.")
+        
 
     def runIMUReadings(self):
         """
@@ -51,7 +62,6 @@ class PSTracker:
         LR axis could also possibly be used as a complimentary filter to angle readings as well, as there is no doubt a relationship
         betweeen the magnitude of an angle change and the magnitude of a reading on the LR axis due to centripital force.
         """
-
 
         GRAVITY = 9.80665 # m/s^2, standard gravity
 
@@ -102,9 +112,12 @@ class PSTracker:
         """ 
         Start the PSTracker to continuously track the particle swarm.
         """
+        logging.info("Starting PSTracker loop...")
+
         # Start IMU readings in a separate process
         imu_process = mp.Process(target=self.runIMUReadings)
         imu_process.start()
+        logging.info("IMU readings process started.")
 
         originScan = None
         priorScan = None
@@ -154,3 +167,15 @@ class PSTracker:
                 self.xLocation = results["x"]
                 self.yLocation = results["y"]
                 self.angle = results["angle"]
+
+    def close(self):
+        """
+        Close the PSTracker and stop the IMU readings.
+        """
+        imus.stop()
+        self.lidar.stop()
+        self.lidar.disconnect()
+        logging.info("PSTracker closed and resources released.")
+
+
+    # TODO: Make a main function for testing purposes.
