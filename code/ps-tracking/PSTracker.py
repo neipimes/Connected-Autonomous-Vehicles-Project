@@ -10,6 +10,7 @@ import time, copy, logging, os
 logging.basicConfig(filename=os.path.expanduser("~/logs/pstracker.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class PSTracker:
+
     def __init__(self, swarmSize: int, w: float, c1: float, c2: float, sections: int = 16, targetTime: float = 1/15):
         """
         Initialize the PSTracker to grab IMU readings and run the PSO algorithm to track the particle swarm.
@@ -21,6 +22,7 @@ class PSTracker:
         :param targetTime: Target time for the tracking loop.
         """
 
+        self.globalStop = False  # Flag to stop the tracking loop
         
         self.swarmSize = swarmSize
         self.w = w
@@ -114,75 +116,89 @@ class PSTracker:
         """
         logging.info("Starting PSTracker loop...")
 
-        # Start IMU readings in a separate process
-        imu_process = mp.Process(target=self.runIMUReadings)
-        imu_process.start()
-        logging.info("IMU readings process started.")
+        try:
+            # Start IMU readings in a separate process
+            imu_process = mp.Process(target=self.runIMUReadings)
+            imu_process.start()
+            logging.info("IMU readings process started.")
 
-        originScan = None
-        priorScan = None
-        # Continuously read lidar scans and run PSO
-        for scan in self.lidar.iter_scans():
-            # Convert scan to numpy array
-            lidar_scan = np.array(scan)
+            originScan = None
+            priorScan = None
+            # Continuously read lidar scans and run PSO
+            for scan in self.lidar.iter_scans():
+                # Convert scan to numpy array
+                lidar_scan = np.array(scan)
 
-            # Check if this is the first scan
-            if priorScan is None:
-                # Store the first scan as the initial scan and continue to next iteration
+                # Check if this is the first scan
+                if priorScan is None:
+                    # Store the first scan as the initial scan and continue to next iteration
+                    priorScan = lidar_scan
+                    originScan = lidar_scan
+                    continue
+
+                # Grab most up-to-date IMU readings using a mutex to ensure thread safety.
+                with self.mutex:
+                    imuXReading = self.xLocation
+                    imuYReading = self.yLocation
+                    imuAngleReading = self.angle
+
+                # Create a PSO instance with the current lidar scan and IMU readings
+                if useOriginScan:
+                    # Use the original scan as the prior scan
+                    priorScan = originScan
+
+                pso = PSO(
+                    swarmSize=self.swarmSize,
+                    w=self.w,
+                    c1=self.c1,
+                    c2=self.c2,
+                    oldLidarScan=priorScan,
+                    newLidarScan=lidar_scan,
+                    sections=self.sections,
+                    imuXReading=imuXReading,
+                    imuYReading=imuYReading,
+                    imuAngleReading=imuAngleReading,
+                    targetTime=self.targetTime
+                )
+
+                # Run the PSO algorithm
+                results = pso.run()
                 priorScan = lidar_scan
-                originScan = lidar_scan
-                continue
 
-            # Grab most up-to-date IMU readings using a mutex to ensure thread safety.
-            with self.mutex:
-                imuXReading = self.xLocation
-                imuYReading = self.yLocation
-                imuAngleReading = self.angle
+                # Update x, y and angle based on the best particle's position
+                with self.mutex:
+                    self.xLocation = results["x"]
+                    self.yLocation = results["y"]
+                    self.angle = results["angle"]
 
-            # Create a PSO instance with the current lidar scan and IMU readings
-            if useOriginScan:
-                # Use the original scan as the prior scan
-                priorScan = originScan
+                # Debugging output
+                if debug:
+                    print(f"PSO Results: X={self.xLocation:.2f}, Y={self.yLocation:.2f}, Angle={self.angle:.2f}")
 
-            pso = PSO(
-                swarmSize=self.swarmSize,
-                w=self.w,
-                c1=self.c1,
-                c2=self.c2,
-                oldLidarScan=priorScan,
-                newLidarScan=lidar_scan,
-                sections=self.sections,
-                imuXReading=imuXReading,
-                imuYReading=imuYReading,
-                imuAngleReading=imuAngleReading,
-                targetTime=self.targetTime
-            )
+                if self.globalStop:
+                    logging.info("Global stop signal received. Terminating PSTracker loop.")
+                    imu_process.terminate()
+                    imu_process.join()
+                    break
 
-            # Run the PSO algorithm
-            results = pso.run()
-            priorScan = lidar_scan
-
-            # Update x, y and angle based on the best particle's position
-            with self.mutex:
-                self.xLocation = results["x"]
-                self.yLocation = results["y"]
-                self.angle = results["angle"]
-
-            # Debugging output
-            if debug:
-                print(f"PSO Results: X={self.xLocation:.2f}, Y={self.yLocation:.2f}, Angle={self.angle:.2f}")
+        except Exception as e:
+            logging.error(f"An error occurred in PSTracker: {e}")
+            imu_process.terminate()
+            imu_process.join()
+            logging.info("IMU readings process terminated due to error.")
+            
 
     def close(self):
         """
         Close the PSTracker and stop the IMU readings.
         """
+        self.globalStop = True  # Set the global stop flag to terminate the loop
         self.lidar.stop()
         self.lidar.disconnect()
         logging.info("PSTracker closed and resources released.")
 
 
 
-# TODO: Make a main function for testing purposes.
 def main():
     try:
         tracker = PSTracker(swarmSize=10, w=0.5, c1=1.5, c2=1.5, sections=16, targetTime=1/15)
