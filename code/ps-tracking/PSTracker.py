@@ -38,6 +38,7 @@ class PSTracker:
 
         self.mutex = mp.Lock()  # Mutex for thread-safe access to IMU readings
 
+
         # Initialize IMU and Lidar
         imus.start()
         self.lidar = RPLidar('/dev/ttyUSB0', baudrate=256000) #TODO: Add adjustability for lidar port. Config file?
@@ -46,7 +47,7 @@ class PSTracker:
             raise ConnectionError("LiDAR connection failed.")
         # Lidar starts on initialization, so we don't need to call start() here.
         time.sleep(5) # Allow some time for the LiDAR to start up and stabilize.
-        self.lidar.clear_input()  # Clear any initial data from the LiDAR.
+        self.lidar.reset()  # Clear any initial data from the LiDAR.
         
         logging.info("LiDAR and IMUs initialised successfully.")
         logging.info(f"PSTracker initialized with swarmSize={swarmSize}, w={w}, c1={c1}, c2={c2}, sections={sections}, targetTime={targetTime}.")
@@ -124,7 +125,7 @@ class PSTracker:
         logging.info("Starting PSTracker loop...")
 
         # Clear lidar input to ensure no stale data
-        self.lidar.clear_input()
+        self.lidar.reset()
 
         try:
             # Start IMU readings in a separate process
