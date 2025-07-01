@@ -28,9 +28,9 @@ class PSO:
             # Creates particles with random positions and angles normally distributed around the IMU readings. 
             # Noise values are representative of the percentage error in the middle 95% (2 standard deviations) of bias values.
             # Reading (mean) is multiplied by the noise value then divided by two to get the standard deviation.
-            x = np.random.normal(imuXReading, imuXReading * xNoise / 2)
-            y = np.random.normal(imuYReading, imuYReading * yNoise / 2)
-            angle = np.random.normal(imuAngleReading, imuAngleReading * angleNoise / 2)
+            x = np.random.normal(imuXReading, abs(imuXReading) * abs(xNoise) / 2)
+            y = np.random.normal(imuYReading, abs(imuYReading) * abs(yNoise) / 2)
+            angle = np.random.normal(imuAngleReading, abs(imuAngleReading) * abs(angleNoise) / 2)
             particle = Particle(x, y, angle)
             self.particles.append(particle)
 
