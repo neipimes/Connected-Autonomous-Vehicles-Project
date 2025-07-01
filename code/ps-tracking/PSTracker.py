@@ -55,6 +55,7 @@ class PSTracker:
         Y location: FB (forward-backward) axis
         X location: LR (left-right) axis
         Angle: Yaw (rotation around the vertical axis)
+        FB and LR measurements are initially in m/s^2 (to be converted to mm/s^2), angle is in degrees.
         """
 
         """
@@ -86,6 +87,10 @@ class PSTracker:
             # Forward/Back: data[0], Left/Right: data[1], Angle change: data[2]
             fbData = data[0] * GRAVITY  # Convert acceleration to m/s^2
             lrData = data[1] * GRAVITY  # Convert acceleration to m/s^2
+
+            # Convert this data to mm/s^2 for consistency with the PSO algorithm.
+            fbData *= 1000  # Convert m/s^2 to mm/s^2
+            lrData *= 1000  # Convert m/s^2 to mm/s^2
 
             # Adjust angle by the angle change and normalize angle to (0, 360)
             angleValue = angleValue + data[2] * timestep  # degrees
@@ -181,6 +186,7 @@ class PSTracker:
                     break
 
         except Exception as e:
+            print(e)
             logging.error(f"An error occurred in PSTracker: {e}")
             imu_process.terminate()
             imu_process.join()
@@ -200,7 +206,7 @@ class PSTracker:
 
 def main():
     try:
-        tracker = PSTracker(swarmSize=10, w=0.5, c1=1.5, c2=1.5, sections=16, targetTime=1/15)
+        tracker = PSTracker(swarmSize=10, w=0.2, c1=0.3, c2=1.5, sections=16, targetTime=1/15)
         tracker.start(useOriginScan = False, debug=True)
     except Exception as e:
         logging.error(f"An error occurred: {e}")
