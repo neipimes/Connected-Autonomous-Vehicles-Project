@@ -293,8 +293,8 @@ def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10, 
         else:
             print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
             return
-        tracker = PSTracker(swarmSize=10, w=0.2, c1=0.3, c2=1.5, sections=16, targetTime=1/15)
-        tracker.startNoTryBlock(useOriginScan = False, debug=True)
+        tracker = PSTracker(swarmSize=swarmSize, w=w, c1=c1, c2=c2, sections=sections, targetTime=targetTime)
+        tracker.startNoTryBlock(useOriginScan=useOriginScan, debug=debug)
     finally:
         tracker.close()
         logging.info("PSTracker has been closed successfully.")
