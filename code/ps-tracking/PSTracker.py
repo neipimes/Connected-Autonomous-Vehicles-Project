@@ -279,8 +279,6 @@ def main():
     try:
         tracker = PSTracker(swarmSize=10, w=0.2, c1=0.3, c2=1.5, sections=16, targetTime=1/15)
         tracker.startNoTryBlock(useOriginScan = False, debug=True)
-    except Exception as e:
-        logging.error(f"An error occurred: {e}")
     finally:
         tracker.close()
         logging.info("PSTracker has been closed successfully.")
