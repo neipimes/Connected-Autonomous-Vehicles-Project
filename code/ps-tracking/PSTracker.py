@@ -45,6 +45,8 @@ class PSTracker:
             logging.error("Failed to connect to LiDAR. Please check the connection.")
             raise ConnectionError("LiDAR connection failed.")
         # Lidar starts on initialization, so we don't need to call start() here.
+        time.sleep(5) # Allow some time for the LiDAR to start up and stabilize.
+        self.lidar.clear_input()  # Clear any initial data from the LiDAR.
         
         logging.info("LiDAR and IMUs initialised successfully.")
         logging.info(f"PSTracker initialized with swarmSize={swarmSize}, w={w}, c1={c1}, c2={c2}, sections={sections}, targetTime={targetTime}.")
@@ -120,6 +122,9 @@ class PSTracker:
         Start the PSTracker to continuously track the particle swarm.
         """
         logging.info("Starting PSTracker loop...")
+
+        # Clear lidar input to ensure no stale data
+        self.lidar.clear_input()
 
         try:
             # Start IMU readings in a separate process
@@ -271,6 +276,7 @@ class PSTracker:
         """
         self.globalStop = True  # Set the global stop flag to terminate the loop
         self.lidar.stop()
+        self.lidar.stop_motor()
         self.lidar.disconnect()
         logging.info("PSTracker closed and resources released.")
 
