@@ -279,7 +279,7 @@ def main():
     try:
         calibrateChoice = input("Calibrate IMUs? (y/N): ").strip().lower()
         if calibrateChoice == 'y':
-            imus.calibrateAll()
+            imus.calibrateAll(50)
             logging.info("IMUs calibrated successfully.")
         elif calibrateChoice == 'n' or calibrateChoice == '':
             logging.info("Skipping IMU calibration.")
