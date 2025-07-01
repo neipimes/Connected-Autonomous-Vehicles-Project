@@ -16,11 +16,21 @@ class motor:
     logging.basicConfig(filename=os.path.expanduser("~/logs/motor.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logging.info("Motor class initialized.")
 
-    def setMotorSpeed(speed: int):
+    def setMotorSpeed(speed: float):
         # Set the motor speed. Speed should be between -100 and 100.
         if -100 <= speed <= 100:
+            # Check the speed value is a max of 2 decimal places.
+            if isinstance(speed, float):
+                speed = round(speed, 2)
+            elif isinstance(speed, int):
+                speed = float(speed)
+            else:
+                logging.error(f"Invalid speed type: {type(speed)}. Must be float or int. Max 2 decimal places.")
+                return
+
+            speedModified = int(speed * 100) # Convert speed to a value between -10000 and 10000
             motor.ser.flush()
-            command = f'S{speed}\n'
+            command = f'S{speedModified}\n'
             logging.info(f"Setting motor speed to {speed}. Command: {command}")
             # Before we send a new speed command, we need to stop the motor first.
             motor.motorStop()
