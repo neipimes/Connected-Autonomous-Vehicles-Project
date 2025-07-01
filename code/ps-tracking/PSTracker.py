@@ -5,6 +5,7 @@ import numpy as np
 from rplidar import RPLidar
 import multiprocessing as mp
 import time, copy, logging, os
+import argparse
 
 # Start logging using the logging directory in home directory.
 logging.basicConfig(filename=os.path.expanduser("~/logs/pstracker.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -275,7 +276,7 @@ class PSTracker:
 
 
 
-def main():
+def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10, w: float = 0.2, c1: float = 0.3, c2: float = 1.5, sections: int = 16, targetTime: float = 1/15):
     try:
         calibrateChoice = input("Calibrate IMUs? (y/N): ").strip().lower()
         if calibrateChoice == 'y':
@@ -293,4 +294,23 @@ def main():
         logging.info("PSTracker has been closed successfully.")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="PSTracker Command Line Options")
+    parser.add_argument('--swarmSize', type=int, default=10, help='Number of particles in the swarm')
+    parser.add_argument('--w', type=float, default=0.2, help='Inertia weight for PSO')
+    parser.add_argument('--c1', type=float, default=0.3, help='Cognitive coefficient for PSO')
+    parser.add_argument('--c2', type=float, default=1.5, help='Social coefficient for PSO')
+    parser.add_argument('--sections', type=int, default=16, help='Number of sections for lidar scan comparison')
+    parser.add_argument('--targetTime', type=float, default=1/15, help='Target time for the tracking loop')
+    parser.add_argument('--debug', action='store_true', help='Enable debug output')
+    parser.add_argument('--originScan', action='store_true', help='Use origin scan as prior scan')
+    args = parser.parse_args()
+    main(
+        debug=args.debug,
+        useOriginScan=args.originScan,
+        swarmSize=args.swarmSize,
+        w=args.w,
+        c1=args.c1,
+        c2=args.c2,
+        sections=args.sections,
+        targetTime=args.targetTime
+    )
