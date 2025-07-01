@@ -277,6 +277,15 @@ class PSTracker:
 
 def main():
     try:
+        calibrateChoice = input("Calibrate IMUs? (y/N): ").strip().lower()
+        if calibrateChoice == 'y':
+            imus.calibrateAll()
+            logging.info("IMUs calibrated successfully.")
+        elif calibrateChoice == 'n' or calibrateChoice == '':
+            logging.info("Skipping IMU calibration.")
+        else:
+            print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
+            return
         tracker = PSTracker(swarmSize=10, w=0.2, c1=0.3, c2=1.5, sections=16, targetTime=1/15)
         tracker.startNoTryBlock(useOriginScan = False, debug=True)
     finally:
