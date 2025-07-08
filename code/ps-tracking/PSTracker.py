@@ -4,7 +4,7 @@ from PSO import PSO
 import numpy as np
 from rplidar import RPLidar
 import multiprocessing as mp
-import time, copy, logging, os
+import time, copy, logging, os, sys
 import argparse
 
 # Start logging using the logging directory in home directory.
@@ -52,7 +52,7 @@ class PSTracker:
         logging.info("LiDAR and IMUs initialised successfully.")
         logging.info(f"PSTracker initialized with swarmSize={swarmSize}, w={w}, c1={c1}, c2={c2}, sections={sections}, targetTime={targetTime}.")
 
-    def runIMUReadings(self, debug=False):
+    def runIMUReadings(self, debug=True):
         """
         Continuously read IMU data and return the latest readings.
         This method runs in a separate process to avoid blocking the main thread.
@@ -119,7 +119,7 @@ class PSTracker:
 
             if debug:
                 print(f"IMU Results: X={self.xLocation:.2f}, Y={self.yLocation:.2f}, Angle={self.angle:.2f}")
-
+                sys.stdout.flush()  # Ensure the output is printed immediately
 
     def start(self, useOriginScan: bool = False, debug: bool = False, noLidar: bool = False):
         """ 
