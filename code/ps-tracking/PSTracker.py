@@ -52,7 +52,7 @@ class PSTracker:
         logging.info("LiDAR and IMUs initialised successfully.")
         logging.info(f"PSTracker initialized with swarmSize={swarmSize}, w={w}, c1={c1}, c2={c2}, sections={sections}, targetTime={targetTime}.")
 
-    def runIMUReadings(self):
+    def runIMUReadings(self, debug=False):
         """
         Continuously read IMU data and return the latest readings.
         This method runs in a separate process to avoid blocking the main thread.
@@ -117,8 +117,11 @@ class PSTracker:
                 self.yLocation = yDisplacement
                 self.angle = angleValue
 
+            if debug:
+                print(f"IMU Results: X={self.xLocation:.2f}, Y={self.yLocation:.2f}, Angle={self.angle:.2f}")
 
-    def start(self, useOriginScan: bool = False, debug: bool = False):
+
+    def start(self, useOriginScan: bool = False, debug: bool = False, noLidar: bool = False):
         """ 
         Start the PSTracker to continuously track the particle swarm.
         """
@@ -136,61 +139,62 @@ class PSTracker:
             originScan = None
             priorScan = None
             # Continuously read lidar scans and run PSO
-            for scan in self.lidar.iter_scans():
-                # Convert scan to numpy array
-                lidar_scan = np.array(scan)
+            if noLidar == False:
+                for scan in self.lidar.iter_scans():
+                    # Convert scan to numpy array
+                    lidar_scan = np.array(scan)
 
-                # Check if this is the first scan
-                if priorScan is None:
-                    # Store the first scan as the initial scan and continue to next iteration
+                    # Check if this is the first scan
+                    if priorScan is None:
+                        # Store the first scan as the initial scan and continue to next iteration
+                        priorScan = lidar_scan
+                        originScan = lidar_scan
+                        continue
+
+                    # Grab most up-to-date IMU readings using a mutex to ensure thread safety.
+                    with self.mutex:
+                        imuXReading = self.xLocation
+                        imuYReading = self.yLocation
+                        imuAngleReading = self.angle
+
+                    # Create a PSO instance with the current lidar scan and IMU readings
+                    if useOriginScan:
+                        # Use the original scan as the prior scan
+                        priorScan = originScan
+
+                    pso = PSO(
+                        swarmSize=self.swarmSize,
+                        w=self.w,
+                        c1=self.c1,
+                        c2=self.c2,
+                        oldLidarScan=priorScan,
+                        newLidarScan=lidar_scan,
+                        sections=self.sections,
+                        imuXReading=imuXReading,
+                        imuYReading=imuYReading,
+                        imuAngleReading=imuAngleReading,
+                        targetTime=self.targetTime
+                    )
+
+                    # Run the PSO algorithm
+                    results = pso.run()
                     priorScan = lidar_scan
-                    originScan = lidar_scan
-                    continue
 
-                # Grab most up-to-date IMU readings using a mutex to ensure thread safety.
-                with self.mutex:
-                    imuXReading = self.xLocation
-                    imuYReading = self.yLocation
-                    imuAngleReading = self.angle
+                    # Update x, y and angle based on the best particle's position
+                    with self.mutex:
+                        self.xLocation = results["x"]
+                        self.yLocation = results["y"]
+                        self.angle = results["angle"]
 
-                # Create a PSO instance with the current lidar scan and IMU readings
-                if useOriginScan:
-                    # Use the original scan as the prior scan
-                    priorScan = originScan
+                    # Debugging output
+                    if debug:
+                        print(f"PSO Results: X={self.xLocation:.2f}, Y={self.yLocation:.2f}, Angle={self.angle:.2f}")
 
-                pso = PSO(
-                    swarmSize=self.swarmSize,
-                    w=self.w,
-                    c1=self.c1,
-                    c2=self.c2,
-                    oldLidarScan=priorScan,
-                    newLidarScan=lidar_scan,
-                    sections=self.sections,
-                    imuXReading=imuXReading,
-                    imuYReading=imuYReading,
-                    imuAngleReading=imuAngleReading,
-                    targetTime=self.targetTime
-                )
-
-                # Run the PSO algorithm
-                results = pso.run()
-                priorScan = lidar_scan
-
-                # Update x, y and angle based on the best particle's position
-                with self.mutex:
-                    self.xLocation = results["x"]
-                    self.yLocation = results["y"]
-                    self.angle = results["angle"]
-
-                # Debugging output
-                if debug:
-                    print(f"PSO Results: X={self.xLocation:.2f}, Y={self.yLocation:.2f}, Angle={self.angle:.2f}")
-
-                if self.globalStop:
-                    logging.info("Global stop signal received. Terminating PSTracker loop.")
-                    imu_process.terminate()
-                    imu_process.join()
-                    break
+                    if self.globalStop:
+                        logging.info("Global stop signal received. Terminating PSTracker loop.")
+                        imu_process.terminate()
+                        imu_process.join()
+                        break
 
         except Exception as e:
             print(e)
@@ -283,7 +287,9 @@ class PSTracker:
 
 
 
-def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10, w: float = 0.2, c1: float = 0.3, c2: float = 1.5, sections: int = 16, targetTime: float = 1/15):
+def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10, 
+         w: float = 0.2, c1: float = 0.3, c2: float = 1.5, sections: int = 16, targetTime: float = 1/15,
+         noLidar: bool = False):
     try:
         calibrateChoice = input("Calibrate IMUs? (y/N): ").strip().lower()
         if calibrateChoice == 'y':
@@ -295,7 +301,7 @@ def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10, 
             print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
             return
         tracker = PSTracker(swarmSize=swarmSize, w=w, c1=c1, c2=c2, sections=sections, targetTime=targetTime)
-        tracker.startNoTryBlock(useOriginScan=useOriginScan, debug=debug)
+        tracker.start(useOriginScan=useOriginScan, debug=debug, noLidar=noLidar)
     finally:
         tracker.close()
         logging.info("PSTracker has been closed successfully.")
@@ -303,13 +309,14 @@ def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10, 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PSTracker Command Line Options")
     parser.add_argument('--swarmSize', type=int, default=10, help='Number of particles in the swarm')
-    parser.add_argument('--w', type=float, default=0.2, help='Inertia weight for PSO')
-    parser.add_argument('--c1', type=float, default=0.3, help='Cognitive coefficient for PSO')
-    parser.add_argument('--c2', type=float, default=1.5, help='Social coefficient for PSO')
+    parser.add_argument('--w', type=float, default=0.3, help='Inertia weight for PSO')
+    parser.add_argument('--c1', type=float, default=0.8, help='Cognitive coefficient for PSO')
+    parser.add_argument('--c2', type=float, default=2.5, help='Social coefficient for PSO')
     parser.add_argument('--sections', type=int, default=16, help='Number of sections for lidar scan comparison')
     parser.add_argument('--targetTime', type=float, default=1/15, help='Target time for the tracking loop')
     parser.add_argument('--debug', action='store_true', help='Enable debug output')
     parser.add_argument('--originScan', action='store_true', help='Use origin scan as prior scan')
+    parser.add_argument('--noLidar', action='store_true', help='Do not use lidar for tracking (for testing purposes)')
     args = parser.parse_args()
     main(
         debug=args.debug,

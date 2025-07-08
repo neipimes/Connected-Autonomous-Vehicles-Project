@@ -48,7 +48,7 @@ class PSO:
         # How long we have left to run the PSO algorithm due to Lidar constraints.
         # Remaining time should be a conservative estimate to ensure we don't exceed the target time.
 
-    def run(self):
+    def run(self, analytics: bool = False):
         startTime = time.time()
         lastIterTime = 0.0
         iterCount = 0
