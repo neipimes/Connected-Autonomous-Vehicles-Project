@@ -132,7 +132,7 @@ class PSTracker:
 
         try:
             # Start IMU readings in a separate process
-            imu_process = mp.Process(target=self.runIMUReadings)
+            imu_process = mp.Process(target=self.runIMUReadings, args=(debug,))
             imu_process.start()
             logging.info("IMU readings process started.")
 
