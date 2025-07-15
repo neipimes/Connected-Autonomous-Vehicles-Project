@@ -23,34 +23,41 @@ class PSTracker:
         :param targetTime: Target time for the tracking loop.
         """
 
+        self._logger = logging.getLogger("PSTrackerLogger")
+        if not self._logger.hasHandlers():
+            log_path = os.path.expanduser("~/logs/pstracker.log")
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            handler = logging.FileHandler(log_path)
+            formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self._logger.addHandler(handler)
+            self._logger.setLevel(logging.INFO)
+        self._logger.info("PSTracker instance created.")
+
         self.globalStop = False  # Flag to stop the tracking loop
-        
         self.swarmSize = swarmSize
         self.w = w
         self.c1 = c1
         self.c2 = c2
         self.sections = sections
         self.targetTime = targetTime
-
         self.xLocation = 0.0
         self.yLocation = 0.0
         self.angle = 0.0
-
         self.mutex = mp.Lock()  # Mutex for thread-safe access to IMU readings
-
 
         # Initialize IMU and Lidar
         imus.start()
         self.lidar = RPLidar('/dev/ttyUSB0', baudrate=256000) #TODO: Add adjustability for lidar port. Config file?
         if self.lidar is None:
-            logging.error("Failed to connect to LiDAR. Please check the connection.")
+            self._logger.error("Failed to connect to LiDAR. Please check the connection.")
             raise ConnectionError("LiDAR connection failed.")
         # Lidar starts on initialization, so we don't need to call start() here.
         time.sleep(5) # Allow some time for the LiDAR to start up and stabilize.
         #self.lidar.reset()  # Clear any initial data from the LiDAR.
         
-        logging.info("LiDAR and IMUs initialised successfully.")
-        logging.info(f"PSTracker initialized with swarmSize={swarmSize}, w={w}, c1={c1}, c2={c2}, sections={sections}, targetTime={targetTime}.")
+        self._logger.info("LiDAR and IMUs initialised successfully.")
+        self._logger.info(f"PSTracker initialized with swarmSize={swarmSize}, w={w}, c1={c1}, c2={c2}, sections={sections}, targetTime={targetTime}.")
 
     def runIMUReadings(self, debug=True):
         """
@@ -125,7 +132,7 @@ class PSTracker:
         """ 
         Start the PSTracker to continuously track the particle swarm.
         """
-        logging.info("Starting PSTracker loop...")
+        self._logger.info("Starting PSTracker loop...")
 
         # Clear lidar input to ensure no stale data
         #self.lidar.reset()
@@ -134,7 +141,7 @@ class PSTracker:
             # Start IMU readings in a separate process
             imu_process = mp.Process(target=self.runIMUReadings, args=(debug,))
             imu_process.start()
-            logging.info("IMU readings process started.")
+            self._logger.info("IMU readings process started.")
 
             originScan = None
             priorScan = None
@@ -191,29 +198,29 @@ class PSTracker:
                         print(f"PSO Results: X={self.xLocation:.2f}, Y={self.yLocation:.2f}, Angle={self.angle:.2f}")
 
                     if self.globalStop:
-                        logging.info("Global stop signal received. Terminating PSTracker loop.")
+                        self._logger.info("Global stop signal received. Terminating PSTracker loop.")
                         imu_process.terminate()
                         imu_process.join()
                         break
 
         except Exception as e:
             print(e)
-            logging.error(f"An error occurred in PSTracker: {e}")
+            self._logger.error(f"An error occurred in PSTracker: {e}")
             imu_process.terminate()
             imu_process.join()
-            logging.info("IMU readings process terminated due to error.")
+            self._logger.info("IMU readings process terminated due to error.")
 
 
     def startNoTryBlock(self, useOriginScan: bool = False, debug: bool = False):
         """ 
         Start the PSTracker to continuously track the particle swarm.
         """
-        logging.info("Starting PSTracker loop...")
+        self._logger.info("Starting PSTracker loop...")
 
         # Start IMU readings in a separate process
         imu_process = mp.Process(target=self.runIMUReadings)
         imu_process.start()
-        logging.info("IMU readings process started.")
+        self._logger.info("IMU readings process started.")
 
         originScan = None
         priorScan = None
@@ -269,7 +276,7 @@ class PSTracker:
                 print(f"PSO Results: X={self.xLocation:.2f}, Y={self.yLocation:.2f}, Angle={self.angle:.2f}")
 
             if self.globalStop:
-                logging.info("Global stop signal received. Terminating PSTracker loop.")
+                self._logger.info("Global stop signal received. Terminating PSTracker loop.")
                 imu_process.terminate()
                 imu_process.join()
                 break
@@ -283,7 +290,7 @@ class PSTracker:
         self.lidar.stop()
         self.lidar.stop_motor()
         self.lidar.disconnect()
-        logging.info("PSTracker closed and resources released.")
+        self._logger.info("PSTracker closed and resources released.")
 
 
 
