@@ -5,18 +5,35 @@ import serial
 import logging
 import os, time
 
-class motor:
-    # Class attributes
-    port = "/dev/ttyACM0"
-    baud = 115200
-    timeout = 1
-    ser = None  # Serial object to communicate with onboard arduino
+class Motor:
+    _instance = None
+    _logger = None
 
-    # Initialise logging
-    logging.basicConfig(filename=os.path.expanduser("~/logs/motor.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    logging.info("Motor class initialized.")
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(Motor, cls).__new__(cls)
+            # Set up logger for this instance
+            cls._logger = logging.getLogger("MotorLogger")
+            if not cls._logger.hasHandlers():
+                log_path = os.path.expanduser("~/logs/motor.log")
+                os.makedirs(os.path.dirname(log_path), exist_ok=True)
+                handler = logging.FileHandler(log_path)
+                formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+                handler.setFormatter(formatter)
+                cls._logger.addHandler(handler)
+                cls._logger.setLevel(logging.INFO)
+            cls._logger.info("Motor singleton instance created.")
+        return cls._instance
 
-    def setMotorSpeed(speed: float):
+    def __init__(self):
+        if not hasattr(self, 'initialized'):
+            self.port = "/dev/ttyACM0"
+            self.baud = 115200
+            self.timeout = 1
+            self.ser = None  # Serial object to communicate with onboard arduino
+            self.initialized = True
+
+    def setMotorSpeed(self, speed: float):
         # Set the motor speed. Speed should be between -100 and 100.
         if -100 <= speed <= 100:
             # Check the speed value is a max of 2 decimal places.
@@ -25,90 +42,95 @@ class motor:
             elif isinstance(speed, int):
                 speed = float(speed)
             else:
-                logging.error(f"Invalid speed type: {type(speed)}. Must be float or int. Max 2 decimal places.")
+                self._logger.error(f"Invalid speed type: {type(speed)}. Must be float or int. Max 2 decimal places.")
                 return
 
             speedModified = int(speed * 100) # Convert speed to a value between -10000 and 10000
-            motor.ser.flush()
+            if self.ser:
+                self.ser.flush()
             command = f'S{speedModified}\n'
-            logging.info(f"Setting motor speed to {speed}. Command: {command}")
+            self._logger.info(f"Setting motor speed to {speed}. Command: {command}")
             # Before we send a new speed command, we need to stop the motor first.
-            motor.motorStop()
+            self.motorStop()
             # Wait for a short period to ensure the motor stops before sending the new speed command.
             #time.sleep(0.1)
-            if motor.ser.is_open:
-                logging.info(f"Sending command to motor: {command.strip()}")
-                motor.ser.write(command.encode())
-                motor.ser.flush()
-        
+            if self.ser and self.ser.is_open:
+                self._logger.info(f"Sending command to motor: {command.strip()}")
+                self.ser.write(command.encode())
+                self.ser.flush()
+    
                 if speed < 0: # Changing the motor direction to reverse has some technicalities, so we need to handle it separately.
                     # The initial command changes the state in the ESC, with the second command sending the speed.
-                    logging.info(f"Motor set to reverse, sending speed command {command.strip()} after state change.")
+                    self._logger.info(f"Motor set to reverse, sending speed command {command.strip()} after state change.")
                     time.sleep(0.5)  
-                    motor.ser.write(command.encode())
-                    motor.ser.flush()
+                    self.ser.write(command.encode())
+                    self.ser.flush()
             
             else:
-                logging.error("Serial port is not open. Cannot send command.")
+                self._logger.error("Serial port is not open. Cannot send command.")
         else:
-            logging.error(f"Invalid speed value of {speed}. Must be between -100 and 100.")
+            self._logger.error(f"Invalid speed value of {speed}. Must be between -100 and 100.")
 
-    def motorStop():
+    def motorStop(self):
         # Stop the motor
         command = 'S0\n'
-        logging.info("Stopping motor. Command: S0")
-        motor.ser.write(command.encode())
-        motor.ser.flush()
+        self._logger.info("Stopping motor. Command: S0")
+        if self.ser:
+            self.ser.write(command.encode())
+            self.ser.flush()
 
-    def importConfig():
+    def importConfig(self):
         # Import the motor configuration from a file located in ~/configs/motor.conf 
         try:
             with open(os.path.expanduser("~/configs/motor.conf"), "r") as config_file:
                 for line in config_file:
                     if line.startswith("port="):
-                        motor.port = line.split("=")[1].strip()
+                        self.port = line.split("=")[1].strip()
                     elif line.startswith("baud="):
-                        motor.baud = int(line.split("=")[1].strip())
+                        self.baud = int(line.split("=")[1].strip())
                     elif line.startswith("timeout="):
-                        motor.timeout = int(line.split("=")[1].strip())
-            logging.info("Motor configuration imported successfully.")
+                        self.timeout = int(line.split("=")[1].strip())
+            self._logger.info("Motor configuration imported successfully.")
             return True
         except Exception as e:
-            logging.error(f"Error importing motor configuration: {e}")
+            self._logger.error(f"Error importing motor configuration: {e}")
             return False
         
-    def saveConfig():
+    def saveConfig(self):
         # Save the motor configuration to a file located in ~/configs/motor.conf 
         try:
             with open(os.path.expanduser("~/configs/motor.conf"), "w") as config_file:
-                config_file.write(f"port={motor.port}\nbaud={motor.baud}\ntimeout={motor.timeout}")
-                logging.info("Motor configuration saved successfully.")
+                config_file.write(f"port={self.port}\nbaud={self.baud}\ntimeout={self.timeout}")
+                self._logger.info("Motor configuration saved successfully.")
                 return True
         except Exception as e:
-            logging.error(f"Error saving motor configuration: {e}")
+            self._logger.error(f"Error saving motor configuration: {e}")
             return False
 
-    def start():
+    def start(self):
         # Initialize the serial connection
         try:
-            motor.ser = serial.Serial(motor.port, motor.baud, timeout=motor.timeout)
+            self.ser = serial.Serial(self.port, self.baud, timeout=self.timeout)
             time.sleep(8) # Wait for the serial connection to fully initialise.
-            logging.info(f"Serial port {motor.port} opened at {motor.baud} baud.")
+            self._logger.info(f"Serial port {self.port} opened at {self.baud} baud.")
         except serial.SerialException as e:
-            if motor.ser and motor.ser.is_open: # If the serial port is already open, we can assume the motor is already connected.
-                logging.info("Serial port already open. Connected to motor.")
+            if self.ser and self.ser.is_open: # If the serial port is already open, we can assume the motor is already connected.
+                self._logger.info("Serial port already open. Connected to motor.")
                 return True
             else:
-                logging.error(f"Error opening serial port: {e}")
+                self._logger.error(f"Error opening serial port: {e}")
                 return False
         return True
     
-    def close():
+    def close(self):
         # Close the serial connection
-        if motor.ser and motor.ser.is_open:
-            motor.ser.close()
-            logging.info("Serial port closed.")
+        if self.ser and self.ser.is_open:
+            self.ser.close()
+            self._logger.info("Serial port closed.")
             return True
         else:
-            logging.warning("Serial port was not open or already closed.")
+            self._logger.warning("Serial port was not open or already closed.")
             return False
+
+# Singleton instance for external use
+motor = Motor()
