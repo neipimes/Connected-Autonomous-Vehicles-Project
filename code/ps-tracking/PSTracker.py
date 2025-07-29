@@ -41,9 +41,9 @@ class PSTracker:
         self.c2 = c2
         self.sections = sections
         self.targetTime = targetTime
-        self.xLocation = 0.0
-        self.yLocation = 0.0
-        self.angle = 0.0
+        self.xLocation = mp.Value('d', 0.0)  # double precision float
+        self.yLocation = mp.Value('d', 0.0)
+        self.angle = mp.Value('d', 0.0)
         self.mutex = mp.Lock()  # Mutex for thread-safe access to IMU readings
 
         # Initialize IMU and Lidar
@@ -59,7 +59,8 @@ class PSTracker:
         self._logger.info("LiDAR and IMUs initialised successfully.")
         self._logger.info(f"PSTracker initialized with swarmSize={swarmSize}, w={w}, c1={c1}, c2={c2}, sections={sections}, targetTime={targetTime}.")
 
-    def runIMUReadings(self, debug=True):
+    @staticmethod
+    def runIMUReadings(xLocation, yLocation, angle, mutex, debug=True):
         """
         Continuously read IMU data and return the latest readings.
         This method runs in a separate process to avoid blocking the main thread.
@@ -80,10 +81,8 @@ class PSTracker:
 
         xVelocity = 0.0
         yVelocity = 0.0
-        
         xDisplacement = 0.0
         yDisplacement = 0.0
-        
         angleValue = 0.0
 
         startTime = time.time()
@@ -119,13 +118,13 @@ class PSTracker:
             yVelocity = yVelocity + yDelta * timestep
 
             # Update imu readings in class
-            with self.mutex:
-                self.xLocation = xDisplacement
-                self.yLocation = yDisplacement
-                self.angle = angleValue
+            with mutex:
+                xLocation.value = xDisplacement
+                yLocation.value = yDisplacement
+                angle.value = angleValue
 
             if debug:
-                print(f"IMU Results: X={self.xLocation:.2f}, Y={self.yLocation:.2f}, Angle={self.angle:.2f}")
+                print(f"IMU Results: X={xLocation.value:.2f}, Y={yLocation.value:.2f}, Angle={angle.value:.2f}")
                 sys.stdout.flush()  # Ensure the output is printed immediately
 
     def start(self, useOriginScan: bool = False, debug: bool = False, noLidar: bool = False):
@@ -139,7 +138,7 @@ class PSTracker:
 
         try:
             # Start IMU readings in a separate process
-            imu_process = mp.Process(target=self.runIMUReadings, args=(debug,))
+            imu_process = mp.Process(target=PSTracker.runIMUReadings, args=(self.xLocation, self.yLocation, self.angle, self.mutex, debug))
             imu_process.start()
             self._logger.info("IMU readings process started.")
 
@@ -160,9 +159,9 @@ class PSTracker:
 
                     # Grab most up-to-date IMU readings using a mutex to ensure thread safety.
                     with self.mutex:
-                        imuXReading = self.xLocation
-                        imuYReading = self.yLocation
-                        imuAngleReading = self.angle
+                        imuXReading = self.xLocation.value
+                        imuYReading = self.yLocation.value
+                        imuAngleReading = self.angle.value
 
                     # Create a PSO instance with the current lidar scan and IMU readings
                     if useOriginScan:
@@ -189,13 +188,13 @@ class PSTracker:
 
                     # Update x, y and angle based on the best particle's position
                     with self.mutex:
-                        self.xLocation = results["x"]
-                        self.yLocation = results["y"]
-                        self.angle = results["angle"]
+                        self.xLocation.value = results["x"]
+                        self.yLocation.value = results["y"]
+                        self.angle.value = results["angle"]
 
                     # Debugging output
                     if debug:
-                        print(f"PSO Results: X={self.xLocation:.2f}, Y={self.yLocation:.2f}, Angle={self.angle:.2f}")
+                        print(f"PSO Results: X={self.xLocation.value:.2f}, Y={self.yLocation.value:.2f}, Angle={self.angle.value:.2f}")
 
                     if self.globalStop:
                         self._logger.info("Global stop signal received. Terminating PSTracker loop.")
@@ -218,7 +217,7 @@ class PSTracker:
         self._logger.info("Starting PSTracker loop...")
 
         # Start IMU readings in a separate process
-        imu_process = mp.Process(target=self.runIMUReadings)
+        imu_process = mp.Process(target=PSTracker.runIMUReadings, args=(self.xLocation, self.yLocation, self.angle, self.mutex, False))
         imu_process.start()
         self._logger.info("IMU readings process started.")
 
@@ -238,9 +237,9 @@ class PSTracker:
 
             # Grab most up-to-date IMU readings using a mutex to ensure thread safety.
             with self.mutex:
-                imuXReading = self.xLocation
-                imuYReading = self.yLocation
-                imuAngleReading = self.angle
+                imuXReading = self.xLocation.value
+                imuYReading = self.yLocation.value
+                imuAngleReading = self.angle.value
 
             # Create a PSO instance with the current lidar scan and IMU readings
             if useOriginScan:
@@ -267,13 +266,13 @@ class PSTracker:
 
             # Update x, y and angle based on the best particle's position
             with self.mutex:
-                self.xLocation = results["x"]
-                self.yLocation = results["y"]
-                self.angle = results["angle"]
+                self.xLocation.value = results["x"]
+                self.yLocation.value = results["y"]
+                self.angle.value = results["angle"]
 
             # Debugging output
             if debug:
-                print(f"PSO Results: X={self.xLocation:.2f}, Y={self.yLocation:.2f}, Angle={self.angle:.2f}")
+                print(f"PSO Results: X={self.xLocation.value:.2f}, Y={self.yLocation.value:.2f}, Angle={self.angle.value:.2f}")
 
             if self.globalStop:
                 self._logger.info("Global stop signal received. Terminating PSTracker loop.")
