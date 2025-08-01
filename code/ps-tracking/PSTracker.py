@@ -44,7 +44,7 @@ class PSTracker:
         self.xLocation = mp.Value('d', 0.0)  # double precision float
         self.yLocation = mp.Value('d', 0.0)
         self.angle = mp.Value('d', 0.0)
-        self.psoUpdate = mp.Value('?', False)  # Boolean for PSO update flag
+        self.psoUpdate = mp.Value('i', 0)  # Integer for PSO update flag (1=True, 0=False)
         self.mutex = mp.Lock()  # Mutex for thread-safe access to IMU readings
 
         # Initialize IMU and Lidar
@@ -93,11 +93,11 @@ class PSTracker:
         while True:
             # Check for PSO update flag and reinitialize local state if set
             with mutex:
-                if psoUpdate.value:
+                if psoUpdate.value == 1:  # 1 means True (update needed)
                     xDisplacement = xLocation.value
                     yDisplacement = yLocation.value
                     angleValue = angle.value
-                    psoUpdate.value = False
+                    psoUpdate.value = 0  # 0 means False (no update needed)
 
             data = imus.getAvgData() # Blocking call to get IMU data
             priorRunningTime = copy.copy(currentRunningTime)
@@ -201,7 +201,7 @@ class PSTracker:
                         self.xLocation.value = results["x"]
                         self.yLocation.value = results["y"]
                         self.angle.value = results["angle"]
-                        self.psoUpdate.value = True
+                        self.psoUpdate.value = 1  # 1 means True (update needed)
 
                     # Debugging output
                     if debug:
@@ -280,7 +280,7 @@ class PSTracker:
                 self.xLocation.value = results["x"]
                 self.yLocation.value = results["y"]
                 self.angle.value = results["angle"]
-                self.psoUpdate.value = True
+                self.psoUpdate.value = 1  # 1 means True (update needed)
 
             # Debugging output
             if debug:
