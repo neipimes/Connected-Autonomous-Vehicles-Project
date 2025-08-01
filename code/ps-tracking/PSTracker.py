@@ -134,7 +134,7 @@ class PSTracker:
                 angle.value = angleValue
 
             if debug:
-                print(f"IMU Results: X={xLocation.value:.2f}, Y={yLocation.value:.2f}, Angle={angle.value:.2f}")
+                print(f"IMU Results: X={xLocation.value:.2f}, Y={yLocation.value:.2f}, Angle={angle.value:.2f}, xVelocity={xVelocity:.2f}, yVelocity={yVelocity:.2f}")
                 sys.stdout.flush()  # Ensure the output is printed immediately
 
     def start(self, useOriginScan: bool = False, debug: bool = False, noLidar: bool = False):
