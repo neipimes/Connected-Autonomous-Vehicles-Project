@@ -44,6 +44,7 @@ class PSTracker:
         self.xLocation = mp.Value('d', 0.0)  # double precision float
         self.yLocation = mp.Value('d', 0.0)
         self.angle = mp.Value('d', 0.0)
+        self.psoUpdate = mp.Value('?', False)  # Boolean for PSO update flag
         self.mutex = mp.Lock()  # Mutex for thread-safe access to IMU readings
 
         # Initialize IMU and Lidar
@@ -117,8 +118,13 @@ class PSTracker:
             xVelocity = xVelocity + xDelta * timestep  # m/s
             yVelocity = yVelocity + yDelta * timestep
 
-            # Update imu readings in class
-            with mutex:
+            # Update imu readings in class and sync with main process
+            with mutex: 
+                # TODO: This is working as intended as a PSO update can come in during an IMU reading loop,
+                # meaning the value is updated without the PSO result being used for displacement calculations.
+                # Either mutex lock the entire loop or use a separate boolean flag to indicate a PSO update.
+                # PSO results may also not be too accurate, so may be better to only nudge the overall position
+                # rather than flat-out replace it.
                 xLocation.value = xDisplacement
                 yLocation.value = yDisplacement
                 angle.value = angleValue
@@ -194,7 +200,7 @@ class PSTracker:
 
                     # Debugging output
                     if debug:
-                        print(f"PSO Results: X={self.xLocation.value:.2f}, Y={self.yLocation.value:.2f}, Angle={self.angle.value:.2f}")
+                        print(f"PSO Results: X={self.xLocation.value:.2f}, Y={self.yLocation.value:.2f}, Angle={self.angle.value:.2f}, Iterations={results['iterations']}")
 
                     if self.globalStop:
                         self._logger.info("Global stop signal received. Terminating PSTracker loop.")
