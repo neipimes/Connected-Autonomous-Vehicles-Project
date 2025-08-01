@@ -61,7 +61,7 @@ class PSTracker:
         self._logger.info(f"PSTracker initialized with swarmSize={swarmSize}, w={w}, c1={c1}, c2={c2}, sections={sections}, targetTime={targetTime}.")
 
     @staticmethod
-    def runIMUReadings(xLocation, yLocation, angle, mutex, debug=True):
+    def runIMUReadings(xLocation, yLocation, angle, psoUpdate, mutex, debug=True):
         """
         Continuously read IMU data and return the latest readings.
         This method runs in a separate process to avoid blocking the main thread.
@@ -80,16 +80,25 @@ class PSTracker:
 
         GRAVITY = 9.80665 # m/s^2, standard gravity
 
+        # Initialize local state from shared values
+        xDisplacement = xLocation.value
+        yDisplacement = yLocation.value
+        angleValue = angle.value
         xVelocity = 0.0
         yVelocity = 0.0
-        xDisplacement = 0.0
-        yDisplacement = 0.0
-        angleValue = 0.0
 
         startTime = time.time()
         currentRunningTime = 0.0
 
         while True:
+            # Check for PSO update flag and reinitialize local state if set
+            with mutex:
+                if psoUpdate.value:
+                    xDisplacement = xLocation.value
+                    yDisplacement = yLocation.value
+                    angleValue = angle.value
+                    psoUpdate.value = False
+
             data = imus.getAvgData() # Blocking call to get IMU data
             priorRunningTime = copy.copy(currentRunningTime)
             currentRunningTime = time.time() - startTime
@@ -119,12 +128,7 @@ class PSTracker:
             yVelocity = yVelocity + yDelta * timestep
 
             # Update imu readings in class and sync with main process
-            with mutex: 
-                # TODO: This is working as intended as a PSO update can come in during an IMU reading loop,
-                # meaning the value is updated without the PSO result being used for displacement calculations.
-                # Either mutex lock the entire loop or use a separate boolean flag to indicate a PSO update.
-                # PSO results may also not be too accurate, so may be better to only nudge the overall position
-                # rather than flat-out replace it.
+            with mutex:
                 xLocation.value = xDisplacement
                 yLocation.value = yDisplacement
                 angle.value = angleValue
@@ -144,7 +148,7 @@ class PSTracker:
 
         try:
             # Start IMU readings in a separate process
-            imu_process = mp.Process(target=PSTracker.runIMUReadings, args=(self.xLocation, self.yLocation, self.angle, self.mutex, debug))
+            imu_process = mp.Process(target=PSTracker.runIMUReadings, args=(self.xLocation, self.yLocation, self.angle, self.psoUpdate, self.mutex, debug))
             imu_process.start()
             self._logger.info("IMU readings process started.")
 
@@ -197,6 +201,7 @@ class PSTracker:
                         self.xLocation.value = results["x"]
                         self.yLocation.value = results["y"]
                         self.angle.value = results["angle"]
+                        self.psoUpdate.value = True
 
                     # Debugging output
                     if debug:
@@ -223,7 +228,7 @@ class PSTracker:
         self._logger.info("Starting PSTracker loop...")
 
         # Start IMU readings in a separate process
-        imu_process = mp.Process(target=PSTracker.runIMUReadings, args=(self.xLocation, self.yLocation, self.angle, self.mutex, False))
+        imu_process = mp.Process(target=PSTracker.runIMUReadings, args=(self.xLocation, self.yLocation, self.angle, self.psoUpdate, self.mutex, False))
         imu_process.start()
         self._logger.info("IMU readings process started.")
 
@@ -275,6 +280,7 @@ class PSTracker:
                 self.xLocation.value = results["x"]
                 self.yLocation.value = results["y"]
                 self.angle.value = results["angle"]
+                self.psoUpdate.value = True
 
             # Debugging output
             if debug:
