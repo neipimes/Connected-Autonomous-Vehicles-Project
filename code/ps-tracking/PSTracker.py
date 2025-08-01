@@ -205,7 +205,7 @@ class PSTracker:
 
                     # Debugging output
                     if debug:
-                        print(f"PSO Results: X={self.xLocation.value:.2f}, Y={self.yLocation.value:.2f}, Angle={self.angle.value:.2f}, Iterations={results['iterations']}")
+                        print(f"PSO Results: X={self.xLocation.value:.2f}, Y={self.yLocation.value:.2f}, Angle={self.angle.value:.2f}, Iterations={results['iterCount']}")
 
                     if self.globalStop:
                         self._logger.info("Global stop signal received. Terminating PSTracker loop.")
