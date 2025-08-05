@@ -6,7 +6,7 @@ class PSO:
     def __init__(self, swarmSize: int, w: float, c1: float, c2: float, 
                  oldLidarScan: np.ndarray, newLidarScan: np.ndarray, sections: int = 16, imuXReading: float = 0.0,
                  imuYReading: float = 0.0, imuAngleReading: float = 0.0, xNoise: float = 0.1, yNoise: float = 0.1, 
-                 angleNoise: float = 0.1, targetTime: float = 0.1):
+                 angleNoise: float = 0.05, targetTime: float = 0.1):
         
         startTime = time.time()
         
