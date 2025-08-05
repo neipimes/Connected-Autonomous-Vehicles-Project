@@ -95,9 +95,12 @@ class PSTracker:
             # Check for PSO update flag and reinitialize local state if set
             with mutex:
                 if psoUpdate.value == 1:  # 1 means True (update needed)
-                    xDisplacement = xLocation.value
-                    yDisplacement = yLocation.value
-                    angleValue = angle.value
+                    if debug:
+                        print("PSO update detected, reinitializing local state.")
+                        sys.stdout.flush()
+                    xDisplacement = copy.deepcopy(xLocation.value)
+                    yDisplacement = copy.deepcopy(yLocation.value)
+                    angleValue = copy.deepcopy(angle.value)
                     psoUpdate.value = 0  # 0 means False (no update needed)
 
             data = imus.getAvgData() # Blocking call to get IMU data
@@ -131,9 +134,9 @@ class PSTracker:
 
             # Update imu readings in class and sync with main process
             with mutex:
-                xLocation.value = xDisplacement
-                yLocation.value = yDisplacement
-                angle.value = angleValue
+                xLocation.value = copy.deepcopy(xDisplacement)
+                yLocation.value = copy.deepcopy(yDisplacement)
+                angle.value = copy.deepcopy(angleValue)
 
                 if debug:
                     print(
