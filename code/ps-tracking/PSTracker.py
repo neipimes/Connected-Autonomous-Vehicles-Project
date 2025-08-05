@@ -93,8 +93,10 @@ class PSTracker:
 
         while True:
             # Check for PSO update flag and reinitialize local state if set
-            with mutex:
+            with mutex: # Only hold mutex at the start of the loop to avoid blocking other processes.
                 if psoUpdate.value == 1:  # 1 means True (update needed)
+                    # If there has been an update during the last iteration,
+                    # throw out the old IMU reading and update the local state with the latest values.
                     if debug:
                         print("PSO update detected, reinitializing local state.")
                         sys.stdout.flush()
@@ -102,6 +104,23 @@ class PSTracker:
                     yDisplacement = copy.deepcopy(yLocation.value)
                     angleValue = copy.deepcopy(angle.value)
                     psoUpdate.value = 0  # 0 means False (no update needed)
+                else:
+                    xLocation.value = copy.deepcopy(xDisplacement)
+                    yLocation.value = copy.deepcopy(yDisplacement)
+                    angle.value = copy.deepcopy(angleValue)
+
+                    if debug:
+                        print(
+                            f"IMU Results: "
+                            f"X={xLocation.value:.2f}, "
+                            f"Y={yLocation.value:.2f}, "
+                            f"Angle={angle.value:.2f}, "
+                            f"xVelocity={xVelocity:.2f}, "
+                            f"yVelocity={yVelocity:.2f}, "
+                            f"timestep={timestep:.4f}"
+                        )
+                        sys.stdout.flush()  # Ensure the output is printed immediately
+
 
             data = imus.getAvgData() # Blocking call to get IMU data
             
@@ -130,26 +149,7 @@ class PSTracker:
             xDisplacement = xDisplacement + xVelocity * timestep + 0.5 * xDelta * timestep**2
             yDisplacement = yDisplacement + yVelocity * timestep + 0.5 * yDelta * timestep**2
             xVelocity = xVelocity + xDelta * timestep  # mm/s
-            yVelocity = yVelocity + yDelta * timestep
-
-            # Update imu readings in class and sync with main process
-            with mutex:
-                xLocation.value = copy.deepcopy(xDisplacement)
-                yLocation.value = copy.deepcopy(yDisplacement)
-                angle.value = copy.deepcopy(angleValue)
-
-                if debug:
-                    print(
-                        f"IMU Results: "
-                        f"X={xLocation.value:.2f}, "
-                        f"Y={yLocation.value:.2f}, "
-                        f"Angle={angle.value:.2f}, "
-                        f"xVelocity={xVelocity:.2f}, "
-                        f"yVelocity={yVelocity:.2f}, "
-                        f"timestep={timestep:.4f}"
-                    )
-                    sys.stdout.flush()  # Ensure the output is printed immediately
-
+            yVelocity = yVelocity + yDelta * timestep                
             
 
     def start(self, useOriginScan: bool = False, debug: bool = False, noLidar: bool = False):
