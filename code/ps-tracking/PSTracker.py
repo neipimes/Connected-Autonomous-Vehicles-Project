@@ -87,6 +87,7 @@ class PSTracker:
         angleValue = 0.0
         xVelocity = 0.0
         yVelocity = 0.0
+        timestep = 0.1  # Default timestep in seconds
 
         startTime = time.time()
         currentRunningTime = 0.0
