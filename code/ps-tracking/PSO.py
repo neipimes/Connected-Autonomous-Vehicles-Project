@@ -6,7 +6,7 @@ class PSO:
     def __init__(self, swarmSize: int, w: float, c1: float, c2: float, 
                  oldLidarScan: np.ndarray, newLidarScan: np.ndarray, sections: int = 16, imuXReading: float = 0.0,
                  imuYReading: float = 0.0, imuAngleReading: float = 0.0, xNoise: float = 0.1, yNoise: float = 0.1, 
-                 angleNoise: float = 0.1, targetTime: float = 0.1):
+                 angleNoise: float = 0.05, targetTime: float = 0.1):
         
         startTime = time.time()
         
@@ -28,9 +28,9 @@ class PSO:
             # Creates particles with random positions and angles normally distributed around the IMU readings. 
             # Noise values are representative of the percentage error in the middle 95% (2 standard deviations) of bias values.
             # Reading (mean) is multiplied by the noise value then divided by two to get the standard deviation.
-            x = np.random.normal(imuXReading, imuXReading * xNoise / 2)
-            y = np.random.normal(imuYReading, imuYReading * yNoise / 2)
-            angle = np.random.normal(imuAngleReading, imuAngleReading * angleNoise / 2)
+            x = np.random.normal(imuXReading, abs(imuXReading) * abs(xNoise) / 2)
+            y = np.random.normal(imuYReading, abs(imuYReading) * abs(yNoise) / 2)
+            angle = np.random.normal(imuAngleReading, abs(imuAngleReading) * abs(angleNoise) / 2)
             particle = Particle(x, y, angle)
             self.particles.append(particle)
 
@@ -48,7 +48,7 @@ class PSO:
         # How long we have left to run the PSO algorithm due to Lidar constraints.
         # Remaining time should be a conservative estimate to ensure we don't exceed the target time.
 
-    def run(self):
+    def run(self, analytics: bool = False):
         startTime = time.time()
         lastIterTime = 0.0
         iterCount = 0
