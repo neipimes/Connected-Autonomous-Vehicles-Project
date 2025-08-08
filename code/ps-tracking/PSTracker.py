@@ -11,8 +11,7 @@ import argparse
 logging.basicConfig(filename=os.path.expanduser("~/logs/pstracker.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class PSTracker:
-
-    def __init__(self, swarmSize: int, w: float, c1: float, c2: float, sections: int = 16, targetTime: float = 1/15):
+    def __init__(self, swarmSize: int, w: float, c1: float, c2: float, sections: int = 16, targetTime: float = 1/15, motorPWM: int = 660):
         """
         Initialize the PSTracker to grab IMU readings and run the PSO algorithm to track the particle swarm.
         :param swarmSize: Number of particles in the swarm.
@@ -41,12 +40,6 @@ class PSTracker:
         self.c2 = c2
         self.sections = sections
         self.targetTime = targetTime
-        """self.xLocation = mp.Value('d', 0.0)  # double precision float
-        self.yLocation = mp.Value('d', 0.0)
-        self.angle = mp.Value('d', 0.0)
-        self.psoUpdate = mp.Value('i', 0)  # Integer for PSO update flag (1=True, 0=False)
-        self.mutex = mp.Lock()  # Mutex for thread-safe access to IMU readings
-        """
         
         # Initialize IMU and Lidar
         imus.start()
@@ -55,6 +48,7 @@ class PSTracker:
             self._logger.error("Failed to connect to LiDAR. Please check the connection.")
             raise ConnectionError("LiDAR connection failed.")
         # Lidar starts on initialization, so we don't need to call start() here.
+        self.lidar.motor_speed = motorPWM # Set motor speed in PWM value (0-1023)
         time.sleep(5) # Allow some time for the LiDAR to start up and stabilize.
         #self.lidar.reset()  # Clear any initial data from the LiDAR.
         
@@ -290,6 +284,7 @@ if __name__ == "__main__":
     parser.add_argument('--c2', type=float, default=2.5, help='Social coefficient for PSO')
     parser.add_argument('--sections', type=int, default=16, help='Number of sections for lidar scan comparison')
     parser.add_argument('--targetTime', type=float, default=1/15, help='Target time for the tracking loop')
+    parser.add_argument('--motorPWM', type=int, default=660, help='Motor PWM value to set speed (0-1023)')
     parser.add_argument('--debug', action='store_true', help='Enable debug output')
     parser.add_argument('--originScan', action='store_true', help='Use origin scan as prior scan')
     parser.add_argument('--noLidar', action='store_true', help='Do not use lidar for tracking (for testing purposes)')
