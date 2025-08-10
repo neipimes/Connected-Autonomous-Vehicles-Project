@@ -13,64 +13,84 @@ from mpu9250_jmdev.mpu_9250 import MPU9250
 from mpu9250_jmdev.registers import *
 from imucontrol.imu import imu
 
-# Configure logging
-logging.basicConfig(filename=os.path.expanduser("~/logs/imu.log"), level=logging.INFO, format="%(asctime)s - %(message)s")
-
 class CAV_imus:
-    mpu1 = MPU9250(address_ak=None, 
-        address_mpu_master=MPU9050_ADDRESS_68, 
-        address_mpu_slave=None, 
-        bus=1, 
-        gfs=GFS_250, # Max of 250 degrees per second
-        afs=AFS_2G, # Max of 2g
-        mfs=None, 
-        mode=None)
+    _instance = None
+    _logger = None
 
-    mpu2 = None # This IMU is not used in the current configuration
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(CAV_imus, cls).__new__(cls)
+            # Set up logger for this instance
+            cls._logger = logging.getLogger("CAV_imusLogger")
+            if not cls._logger.hasHandlers():
+                log_path = os.path.expanduser("~/logs/imu.log")
+                os.makedirs(os.path.dirname(log_path), exist_ok=True)
+                handler = logging.FileHandler(log_path)
+                formatter = logging.Formatter('%(asctime)s - %(message)s')
+                handler.setFormatter(formatter)
+                cls._logger.addHandler(handler)
+                cls._logger.setLevel(logging.INFO)
+            cls._logger.info("CAV_imus singleton instance created.")
+        return cls._instance
 
-    mpu3 = MPU9250(address_ak=None, 
-        address_mpu_master=MPU9050_ADDRESS_69, # IMU3 has its AD0 pin set to high, so its I2C address is 0x69
-        address_mpu_slave=None, 
-        bus=1, 
-        gfs=GFS_250, # Max of 250 degrees per second
-        afs=AFS_2G, # Max of 2g
-        mfs=None, 
-        mode=None)
+    def __init__(self):
+        if not hasattr(self, 'initialized'):
+            self.mpu1 = MPU9250(address_ak=None, 
+                address_mpu_master=MPU9050_ADDRESS_68, 
+                address_mpu_slave=None, 
+                bus=1, 
+                gfs=GFS_250, # Max of 250 degrees per second
+                afs=AFS_2G, # Max of 2g
+                mfs=None, 
+                mode=None)
 
-    mpu4 = MPU9250(address_ak=None, 
-        address_mpu_master=MPU9050_ADDRESS_69, # IMU4 has its AD0 pin set to high, so its I2C address is 0x69
-        address_mpu_slave=None, 
-        bus=8, 
-        gfs=GFS_250, # Max of 250 degrees per second
-        afs=AFS_2G, # Max of 2g
-        mfs=None, 
-        mode=None)
+            self.mpu2 = None # This IMU is not used in the current configuration
 
-    mpu5 = MPU9250(address_ak=None, 
-        address_mpu_master=MPU9050_ADDRESS_68,
-        address_mpu_slave=None, 
-        bus=8, 
-        gfs=GFS_250, # Max of 250 degrees per second
-        afs=AFS_2G, # Max of 2g
-        mfs=None, 
-        mode=None)
-    
-    # Forward and Left: Positive values. Back and Right: Negative values.
-    imu1 = imu("Front", mpu1, [0, 0, 0], [0, 0, 0], 0, 1, -1, -1) # Front IMU
-    imu2 = None # This IMU is not used in the current configuration
-    imu3 = imu("Left", mpu3, [0, 0, 0], [0, 0, 0], 1, 0, 1, -1) # Left IMU
-    imu4 = imu("Right", mpu4, [0, 0, 0], [0, 0, 0], 1, 0, -1, 1) # Right IMU
-    imu5 = imu("Back", mpu5, [0, 0, 0], [0, 0, 0], 0, 1, 1, 1) # Back IMU
+            self.mpu3 = MPU9250(address_ak=None, 
+                address_mpu_master=MPU9050_ADDRESS_69, # IMU3 has its AD0 pin set to high, so its I2C address is 0x69
+                address_mpu_slave=None, 
+                bus=1, 
+                gfs=GFS_250, # Max of 250 degrees per second
+                afs=AFS_2G, # Max of 2g
+                mfs=None, 
+                mode=None)
 
-    imuList = [imu1, imu3, imu4, imu5]
-    imuAliases = {"Front": imu1, "Back": imu5, "Left": imu3, "Right": imu4}
+            self.mpu4 = MPU9250(address_ak=None, 
+                address_mpu_master=MPU9050_ADDRESS_69, # IMU4 has its AD0 pin set to high, so its I2C address is 0x69
+                address_mpu_slave=None, 
+                bus=8, 
+                gfs=GFS_250, # Max of 250 degrees per second
+                afs=AFS_2G, # Max of 2g
+                mfs=None, 
+                mode=None)
 
-    # Track the IMUs that have the lowest acceleration noise values for each axis
-    # This is used to determine which IMU to use for each axis when calculating the average data.
-    imuFB = None
-    imuLR = None
+            self.mpu5 = MPU9250(address_ak=None, 
+                address_mpu_master=MPU9050_ADDRESS_68,
+                address_mpu_slave=None, 
+                bus=8, 
+                gfs=GFS_250, # Max of 250 degrees per second
+                afs=AFS_2G, # Max of 2g
+                mfs=None, 
+                mode=None)
+            
+            # Forward and Left: Positive values. Back and Right: Negative values.
+            self.imu1 = imu("Front", self.mpu1, [0, 0, 0], [0, 0, 0], 0, 1, -1, -1) # Front IMU
+            self.imu2 = None # This IMU is not used in the current configuration
+            self.imu3 = imu("Left", self.mpu3, [0, 0, 0], [0, 0, 0], 1, 0, 1, -1) # Left IMU
+            self.imu4 = imu("Right", self.mpu4, [0, 0, 0], [0, 0, 0], 1, 0, -1, 1) # Right IMU
+            self.imu5 = imu("Back", self.mpu5, [0, 0, 0], [0, 0, 0], 0, 1, 1, 1) # Back IMU
 
-    def logIMUConfiguration(imu_name, gfs=None, afs=None, abias=None, gbias=None):
+            self.imuList = [self.imu1, self.imu3, self.imu4, self.imu5]
+            self.imuAliases = {"Front": self.imu1, "Back": self.imu5, "Left": self.imu3, "Right": self.imu4}
+
+            # Track the IMUs that have the lowest acceleration noise values for each axis
+            # This is used to determine which IMU to use for each axis when calculating the average data.
+            self.imuFB = None
+            self.imuLR = None
+
+            self.initialized = True
+
+    def logIMUConfiguration(self, imu_name, gfs=None, afs=None, abias=None, gbias=None):
         log_message = f"{imu_name} configuration updated:"
         if gfs is not None and afs is not None:
             log_message += f" GFS: {gfs}, AFS: {afs};"
@@ -78,34 +98,34 @@ class CAV_imus:
             log_message += f" Accelerometer Bias: {abias};"
         if gbias is not None:
             log_message += f" Gyroscope Bias: {gbias};"
-        logging.info(log_message)
+        self._logger.info(log_message)
 
-    def updateLowestNoiseIMUs():
+    def updateLowestNoiseIMUs(self):
         # Determine and assign the IMUs with the lowest acceleration noise values for FB and LR axes
         try:
             lowestFBNoise = float('inf')
             lowestLRNoise = float('inf')
-            CAV_imus.imuFB = None
-            CAV_imus.imuLR = None
+            self.imuFB = None
+            self.imuLR = None
 
-            for imu_obj in CAV_imus.imuList:
+            for imu_obj in self.imuList:
                 if imu_obj is not None:
                     if imu_obj.getFBAcellNoise() < lowestFBNoise:  # Assuming index 0 corresponds to FB axis
                         lowestFBNoise = imu_obj.getFBAcellNoise()
-                        CAV_imus.imuFB = imu_obj
+                        self.imuFB = imu_obj
                     if imu_obj.getLRAcellNoise() < lowestLRNoise:  # Assuming index 1 corresponds to LR axis
                         lowestLRNoise = imu_obj.getLRAcellNoise()
-                        CAV_imus.imuLR = imu_obj
+                        self.imuLR = imu_obj
 
-            logging.info(f"IMU with lowest FB noise: {CAV_imus.imuFB.pos if CAV_imus.imuFB else 'None'}")
-            logging.info(f"IMU with lowest LR noise: {CAV_imus.imuLR.pos if CAV_imus.imuLR else 'None'}")
+            self._logger.info(f"IMU with lowest FB noise: {self.imuFB.pos if self.imuFB else 'None'}")
+            self._logger.info(f"IMU with lowest LR noise: {self.imuLR.pos if self.imuLR else 'None'}")
         except Exception as e:
-            logging.error(f"Error updating lowest noise IMUs: {e}")
+            self._logger.error(f"Error updating lowest noise IMUs: {e}")
 
-    def calibrateAll(numOfSamples):
+    def calibrateAll(self, numOfSamples):
         # Calibrate all IMUs in the imuList which are not None, averaging the middle 95% of the returned a and g bias values across numOfSamples
         try:
-            for imu_obj in CAV_imus.imuList:
+            for imu_obj in self.imuList:
                 if imu_obj is not None:
                     imu_obj.mpu.configureMPU6500(gfs=GFS_250, afs=AFS_2G)
                     aBiasSamples = []
@@ -150,8 +170,8 @@ class CAV_imus:
                     imu_obj.aNoiseVals = aBiasNoise
                     imu_obj.gNoiseVals = gBiasNoise
 
-                    CAV_imus.logIMUConfiguration(
-                        f"IMU{CAV_imus.imuList.index(imu_obj) + 1}",
+                    self.logIMUConfiguration(
+                        f"IMU{self.imuList.index(imu_obj) + 1}",
                         gfs=GFS_250,
                         afs=AFS_2G,
                         abias=imu_obj.mpu.abias,
@@ -159,20 +179,20 @@ class CAV_imus:
                     )
 
             # Update the IMUs with the lowest noise values
-            CAV_imus.updateLowestNoiseIMUs()
+            self.updateLowestNoiseIMUs()
 
             # Save bias data and noise to imu.conf
-            CAV_imus.saveConfig()
+            self.saveConfig()
         except Exception as e:
-            logging.error(f"Error during calibration: {e}")
+            self._logger.error(f"Error during calibration: {e}")
 
-    def saveConfig():
+    def saveConfig(self):
         # Save IMU configuration, biases, noise values, and aliases to ~/configs/imu.conf
         try:
             config_path = os.path.expanduser("~/configs/imu.conf")
             os.makedirs(os.path.dirname(config_path), exist_ok=True)
             with open(config_path, "w") as file:
-                for idx, imu_obj in enumerate(CAV_imus.imuList):
+                for idx, imu_obj in enumerate(self.imuList):
                     if imu_obj is not None:
                         # Save IMU creation information
                         file.write(f"IMU{idx + 1} Position: {imu_obj.pos}\n")
@@ -187,27 +207,27 @@ class CAV_imus:
                         file.write(f"IMU{idx + 1} G Bias Noise: {imu_obj.gNoiseVals}\n")
                 # Save imuAliases
                 file.write("IMU Aliases:\n")
-                for alias, imu_obj in CAV_imus.imuAliases.items():
-                    file.write(f"{alias}: IMU{CAV_imus.imuList.index(imu_obj) + 1}\n")
-            logging.info("IMU configuration and aliases saved to ~/configs/imu.conf.")
+                for alias, imu_obj in self.imuAliases.items():
+                    file.write(f"{alias}: IMU{self.imuList.index(imu_obj) + 1}\n")
+            self._logger.info("IMU configuration and aliases saved to ~/configs/imu.conf.")
         except Exception as e:
-            logging.error(f"Error saving configuration: {e}")
+            self._logger.error(f"Error saving configuration: {e}")
 
-    def importSavedConfig():
+    def importSavedConfig(self):
         # Import IMU configuration, biases, noise values, and aliases from ~/configs/imu.conf
         config_path = os.path.expanduser("~/configs/imu.conf")
         if not os.path.exists(config_path):
             error_message = "Error: ~/configs/imu.conf file not found."
             print(error_message)
-            logging.error(error_message)
+            self._logger.error(error_message)
             return
         
         try:
             with open(config_path, "r") as file:
                 lines = file.readlines()
 
-            CAV_imus.imuAliases = {}
-            for idx, imu_obj in enumerate(CAV_imus.imuList):
+            self.imuAliases = {}
+            for idx, imu_obj in enumerate(self.imuList):
                 if imu_obj is not None:
                     try:
                         # Parse IMU creation information
@@ -282,7 +302,7 @@ class CAV_imus:
                         imu_obj.aNoiseVals = aNoise
                         imu_obj.gNoiseVals = gNoise
 
-                        CAV_imus.logIMUConfiguration(
+                        self.logIMUConfiguration(
                             f"IMU{idx + 1}",
                             gfs=GFS_250,
                             afs=AFS_2G,
@@ -292,31 +312,28 @@ class CAV_imus:
                     except (ValueError, IndexError) as e:
                         error_message = f"Error: Invalid data for IMU{idx + 1}. {e}"
                         print(error_message)
-                        logging.error(error_message)
+                        self._logger.error(error_message)
 
             # Update the IMUs with the lowest noise values
-            CAV_imus.updateLowestNoiseIMUs()
+            self.updateLowestNoiseIMUs()
 
             # Parse imuAliases
-            aliasStartIndex = len(CAV_imus.imuList) * 9
+            aliasStartIndex = len(self.imuList) * 9
             for line in lines[aliasStartIndex:]:
                 if "IMU Aliases:" in line:
                     continue
                 alias, imuRef = line.strip().split(":")
                 alias = alias.strip()
                 imuIndex = int(imuRef.strip().split("IMU")[1]) - 1
-                CAV_imus.imuAliases[alias] = CAV_imus.imuList[imuIndex] # TODO: Removing imu2 from imuList causes a fuck up here where imu5 is not added to the aliases.
-                # E.g. IMU5 is in index 3, not index 4 as it would be if index 1 didn't contain IMU3.
-                # TODO: Could have the second entry be None in the base global imuList, and then drop the None values when enumerating in above loop.
-                # This means we could still have working alias matching here.
-            logging.info("IMU configuration and aliases imported from ~/configs/imu.conf.")
+                self.imuAliases[alias] = self.imuList[imuIndex]
+            self._logger.info("IMU configuration and aliases imported from ~/configs/imu.conf.")
 
         except Exception as e:
             error_message = f"Error: Failed to read or parse ~/configs/imu.conf. {e}"
             print(error_message)
-            logging.error(error_message)
+            self._logger.error(error_message)
 
-    def getAvgData():
+    def getAvgData(self):
         # Iterate over the IMUs, get their measurements for a direction, modify according to layout,
         # and return the average of the measurements for that direction balanced by thier respective noise values.
 
@@ -332,8 +349,12 @@ class CAV_imus:
         #       measurements being read out of sync from each other.
         #       This means the individual axes will be slightly more out of sync, but individual axis
         #       accuracy will increase.
+
+        # TODO: Averaging across all IMUs is not perfect, as the measurement of the most reliable IMU should be enough to determine an accurate values.
+        #       This is different for the turn angle, where averaging does seem to make the result more accurate (Noise is more random).
+        #       For acceleration, using the most reliable (or top 2) IMU(s) should be enough to determine an accurate value. Could be worse over longer periods of time however.
         
-        for imu_obj in CAV_imus.imuList:
+        for imu_obj in self.imuList:
             if imu_obj is not None:
                 allAccFBData.append(imu_obj.getFBAccelData())
                 allAccFBNoise.append(imu_obj.getFBAcellNoise())
@@ -345,7 +366,7 @@ class CAV_imus:
         for i in range(len(allTurnAngleNoise)):
             # Invert the noise values to be a multiplier for the data value, then
             # raise to a power to increase the effect of the noise value on the data value.
-            allTurnAngleNoise[i] = (1 - allTurnAngleNoise[i]) ** 20
+            allTurnAngleNoise[i] = (1 - allTurnAngleNoise[i]) ** 20 
         
         weightsTA = []
         
@@ -391,8 +412,17 @@ class CAV_imus:
             avgLR = 0
 
         return (avgFB, avgLR, avgTA) # Return the average values for FB, LR and Turn Angle.
-    
-    def start():
+
+    def start(self):
         # Setup function to be run to initialise the IMUs.
-        # Currently will only run the importSavedConfig function to load the bias values from the imu.conf file.
-        CAV_imus.importSavedConfig()
+        
+        config_path = os.path.expanduser("~/configs/imu.conf")
+        if not os.path.exists(config_path):
+            # Run an initial calibration and save to ~/configs/imu.conf
+            self._logger.info("imu.conf not found. Running initial calibration and saving configuration.")
+            self.calibrateAll(50)
+
+        self.importSavedConfig()
+
+# Singleton instance for external use
+cav_imus = CAV_imus()
