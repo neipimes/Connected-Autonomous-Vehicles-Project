@@ -332,10 +332,6 @@ class CAV_imus:
         #       measurements being read out of sync from each other.
         #       This means the individual axes will be slightly more out of sync, but individual axis
         #       accuracy will increase.
-
-        # TODO: Averaging across all IMUs is not perfect, as the measurement of the most reliable IMU should be enough to determine an accurate values.
-        #       This is different for the turn angle, where averaging does seem to make the result more accurate (Noise is more random).
-        #       For acceleration, using the most reliable (or top 2) IMU(s) should be enough to determine an accurate value. Could be worse over longer periods of time however.
         
         for imu_obj in CAV_imus.imuList:
             if imu_obj is not None:
@@ -346,45 +342,56 @@ class CAV_imus:
                 allTurnAngleData.append(imu_obj.getTurnAngle())
                 allTurnAngleNoise.append(imu_obj.getTurnAngleNoise())
         
-        for i in range(len(allAccFBNoise)):
+        for i in range(len(allTurnAngleNoise)):
             # Invert the noise values to be a multiplier for the data value, then
             # raise to a power to increase the effect of the noise value on the data value.
-            allAccFBNoise[i] = (1 - allAccFBNoise[i]) ** 20 
-            allAccLRNoise[i] = (1 - allAccLRNoise[i]) ** 20
             allTurnAngleNoise[i] = (1 - allTurnAngleNoise[i]) ** 20
         
-        weightsFB = []
-        weightsLR = []
         weightsTA = []
-        for i in range(len(allAccFBNoise)):
+        
+        for i in range(len(allTurnAngleNoise)):
             # Divide the noise value by the sum of the noise values to get a weighted multiplier for the data value.
-            weightsFB.append(allAccFBNoise[i] / sum(allAccFBNoise))
-            weightsLR.append(allAccLRNoise[i] / sum(allAccLRNoise))
             weightsTA.append(allTurnAngleNoise[i] / sum(allTurnAngleNoise))
 
-        avgFB = None
-        avgLR = None
         avgTA = None
-        for i in range(len(allAccFBData)):
+        for i in range(len(allTurnAngleData)):
             # Multiply the data value by the weighted noise value to get a weighted data value.
-            if avgFB is None:
-                avgFB = allAccFBData[i] * weightsFB[i]
-            else:
-                avgFB = avgFB + allAccFBData[i] * weightsFB[i]
-            
-            if avgLR is None:
-                avgLR = allAccLRData[i] * weightsLR[i]
-            else:
-                avgLR = avgLR + allAccLRData[i] * weightsLR[i]
-
             if avgTA is None:
                 avgTA = allTurnAngleData[i] * weightsTA[i]
             else:
                 avgTA = avgTA + allTurnAngleData[i] * weightsTA[i]
-                
+
+        # FB and LR averaging
+        # Calculate FB (Front-Back) acceleration using the two IMUs with lowest FB noise
+        fb_imus = sorted(
+            [(imu_obj, imu_obj.getFBAcellNoise(), imu_obj.getFBAccelData())
+             for imu_obj in CAV_imus.imuList if imu_obj is not None],
+            key=lambda x: x[1]
+        )[:2]
+
+        if len(fb_imus) == 2:
+            avgFB = (fb_imus[0][2] + fb_imus[1][2]) / 2
+        elif len(fb_imus) == 1:
+            avgFB = fb_imus[0][2]
+        else:
+            avgFB = 0
+
+        # Calculate LR (Left-Right) acceleration using the two IMUs with lowest LR noise
+        lr_imus = sorted(
+            [(imu_obj, imu_obj.getLRAcellNoise(), imu_obj.getLRAccelData())
+             for imu_obj in CAV_imus.imuList if imu_obj is not None],
+            key=lambda x: x[1]
+        )[:2]
+
+        if len(lr_imus) == 2:
+            avgLR = (lr_imus[0][2] + lr_imus[1][2]) / 2
+        elif len(lr_imus) == 1:
+            avgLR = lr_imus[0][2]
+        else:
+            avgLR = 0
 
         return (avgFB, avgLR, avgTA) # Return the average values for FB, LR and Turn Angle.
-
+    
     def start():
         # Setup function to be run to initialise the IMUs.
         # Currently will only run the importSavedConfig function to load the bias values from the imu.conf file.
