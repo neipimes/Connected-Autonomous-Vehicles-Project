@@ -11,7 +11,13 @@ import argparse
 logging.basicConfig(filename=os.path.expanduser("~/logs/pstracker.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class PSTracker:
-    def __init__(self, swarmSize: int, w: float, c1: float, c2: float, sections: int = 16, targetTime: float = 1/15, motorPWM: int = 660):
+    def __init__(self, 
+                 swarmSize: int, 
+                 w: float, c1: float, c2: float, 
+                 sections: int = 16, 
+                 targetTime: float = 1/15, 
+                 motorPWM: int = 660, 
+                 qualityCutoff: int = 0):
         """
         Initialize the PSTracker to grab IMU readings and run the PSO algorithm to track the particle swarm.
         :param swarmSize: Number of particles in the swarm.
@@ -20,6 +26,8 @@ class PSTracker:
         :param c2: Social coefficient for PSO.
         :param sections: Number of sections for lidar scan comparison.
         :param targetTime: Target time for the tracking loop.
+        :param motorPWM: Motor PWM value for the LiDAR.
+        :param qualityCutoff: Quality cutoff for LiDAR readings.
         """
 
         self._logger = logging.getLogger("PSTrackerLogger")
@@ -40,7 +48,8 @@ class PSTracker:
         self.c2 = c2
         self.sections = sections
         self.targetTime = targetTime
-        
+        self.qualityCutoff = qualityCutoff
+
         # Initialize IMU and Lidar
         imus.start()
         self.lidar = RPLidar('/dev/ttyUSB0', baudrate=256000) #TODO: Add adjustability for lidar port. Config file?
@@ -147,7 +156,7 @@ class PSTracker:
             yVelocity = yVelocity + yDelta * timestep                
             
 
-    def start(self, useOriginScan: bool = False, debug: bool = False, noLidar: bool = False):
+    def start(self, useOriginScan: bool = False, debug: bool = False, testing: bool = False, noLidar: bool = False, duration: float = None):
         """ 
         Start the PSTracker to continuously track the particle swarm.
         """
@@ -164,6 +173,11 @@ class PSTracker:
             psoUpdate = mp.Value('i', 0)  # Integer for PSO update flag (1=True, 0=False)
             mutex = mp.Lock()  # Mutex for thread-safe access to IMU readings
 
+            # Testing variables
+            avgIterations = 0
+            avgCost = 0.0
+            runCount = 0
+
             # Start IMU readings in a separate process
             imu_process = mp.Process(target=PSTracker.runIMUReadings, args=(xLocation, yLocation, angle, psoUpdate, mutex, debug))
             imu_process.start()
@@ -171,9 +185,15 @@ class PSTracker:
 
             originScan = None
             priorScan = None
+            start_time = time.time() if duration else None
+
             # Continuously read lidar scans and run PSO
             if noLidar == False:
                 for scan in self.lidar.iter_scans():
+                    if duration and time.time() - start_time >= duration:
+                        self._logger.info(f"Duration reached. Terminating PSTracker loop after {time.time() - start_time:.2f} seconds.")
+                        break
+
                     # Convert scan to numpy array
                     lidar_scan = np.array(scan)
 
@@ -219,17 +239,17 @@ class PSTracker:
                         yLocation.value = results["y"]
                         angle.value = results["angle"]
                         psoUpdate.value = 1  # 1 means True (update needed)
-                        
+
                         # Debugging output
                         if debug:
                             print(
-                                f"PSO Results: "
-                                f"X={xLocation.value:.2f}, "
-                                f"Y={yLocation.value:.2f}, "
-                                f"Angle={angle.value:.2f}, "
-                                f"Iterations={results['iterCount']}, "
-                                f"Cost={results['cost']:.2f}"
+                                f"PSO Results: X={xLocation.value:.2f}, Y={yLocation.value:.2f}, Angle={angle.value:.2f}, Iterations={results['iterCount']}, Cost={results['cost']:.2f}"
                             )
+
+                        if testing:
+                            runCount += 1
+                            avgIterations += results['iterCount']
+                            avgCost += results['cost']
 
                     if self.globalStop:
                         self._logger.info("Global stop signal received. Terminating PSTracker loop.")
@@ -243,6 +263,8 @@ class PSTracker:
             imu_process.terminate()
             imu_process.join()
             self._logger.info("IMU readings process terminated due to error.")
+
+        return (xLocation.value, yLocation.value, angle.value, avgIterations / runCount if testing and runCount > 0 else 0, avgCost / runCount if testing and runCount > 0 else 0)
 
 
     def close(self):
