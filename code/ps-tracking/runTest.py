@@ -42,7 +42,7 @@ def run_tracker(params):
     # Cache calculated targetTime
     if params['motorPWM'] not in target_time_cache:
         freq = LIDAR_PWM_TO_TIME[params['motorPWM']]
-        target_time_cache[params['motorPWM']] = int(1 / (freq * 1.15))
+        target_time_cache[params['motorPWM']] = 1 / (freq * 1.15)
 
     # Use cached targetTime
     target_time = target_time_cache[params['motorPWM']]
@@ -75,7 +75,7 @@ try:
     # Sequential testing process
     results = []
     for params in parameter_dicts:
-        print(f"Testing parameters: {params}, targetTime: {target_time_cache[params['motorPWM']]}")
+        print(f"Testing parameters: {params}, targetTime: {LIDAR_PWM_TO_TIME[params['motorPWM']]}")
         results.append(run_tracker(params))
 finally:
     if results:
