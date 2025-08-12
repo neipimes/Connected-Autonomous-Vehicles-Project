@@ -291,7 +291,7 @@ class PSTracker:
 
 def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10, 
          w: float = 0.2, c1: float = 0.3, c2: float = 1.5, sections: int = 16, targetTime: float = 1/15,
-         noLidar: bool = False):
+         noLidar: bool = False, motorPWM: int = 660):
     try:
         calibrateChoice = input("Calibrate IMUs? (y/N): ").strip().lower()
         if calibrateChoice == 'y':
@@ -329,5 +329,6 @@ if __name__ == "__main__":
         c1=args.c1,
         c2=args.c2,
         sections=args.sections,
-        targetTime=args.targetTime
+        targetTime=args.targetTime,
+        motorPWM=args.motorPWM
     )
