@@ -89,7 +89,7 @@ class PSO:
 
         # Initialize shared objects and variables for parallel processing
         manager = multiprocessing.Manager()
-        best_particle = manager.list([None])
+        best_particle = manager.list([Particle(0, 0, 0)])  # Initialize with a default Particle
         lock = manager.Lock()
 
         initTime = time.time() - startTime
