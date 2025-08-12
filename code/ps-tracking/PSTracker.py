@@ -14,7 +14,10 @@ class PSTracker:
     def __init__(self, 
                  swarmSize: int, 
                  w: float, c1: float, c2: float, 
-                 sections: int = 16, 
+                 sections: int = 16,
+                 xNoise: float = 0.1,
+                 yNoise: float = 0.1,
+                 angleNoise: float = 0.1,
                  targetTime: float = 1/15, 
                  motorPWM: int = 660, 
                  qualityCutoff: int = 0):
@@ -49,6 +52,9 @@ class PSTracker:
         self.sections = sections
         self.targetTime = targetTime
         self.qualityCutoff = qualityCutoff
+        self.xNoise = xNoise
+        self.yNoise = yNoise
+        self.angleNoise = angleNoise
 
         # Initialize IMU and Lidar
         imus.start()
@@ -223,6 +229,9 @@ class PSTracker:
                         oldLidarScan=priorScan,
                         newLidarScan=lidar_scan,
                         sections=self.sections,
+                        xNoise=self.xNoise,
+                        yNoise=self.yNoise,
+                        angleNoise=self.angleNoise,
                         imuXReading=imuXReading,
                         imuYReading=imuYReading,
                         imuAngleReading=imuAngleReading,
