@@ -5,7 +5,6 @@ import math
 import csv
 import json
 from consts import LIDAR_PWM_TO_TIME
-import multiprocessing as mp
 
 # Load parameters from CSV file
 parameters_file = "parameters.csv"
@@ -65,9 +64,10 @@ def run_tracker(params):
         'avg_cost': avg_cost
     }
 
-# Parallelize testing process
-with mp.Pool(mp.cpu_count()) as pool:
-    results = pool.map(run_tracker, parameter_dicts)
+# Sequential testing process
+results = []
+for params in parameter_dicts:
+    results.append(run_tracker(params))
 
 # Save results to JSON file
 results_file = "results.json"
