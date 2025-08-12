@@ -302,7 +302,7 @@ def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10,
         else:
             print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
             return
-        tracker = PSTracker(swarmSize=swarmSize, w=w, c1=c1, c2=c2, sections=sections, targetTime=targetTime)
+        tracker = PSTracker(swarmSize=swarmSize, w=w, c1=c1, c2=c2, sections=sections, targetTime=targetTime, motorPWM=motorPWM)
         tracker.start(useOriginScan=useOriginScan, debug=debug, noLidar=noLidar)
     finally:
         tracker.close()
