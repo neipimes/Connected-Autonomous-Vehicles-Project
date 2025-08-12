@@ -73,6 +73,15 @@ class PSO:
         # How long we have left to run the PSO algorithm due to Lidar constraints.
         # Remaining time should be a conservative estimate to ensure we don't exceed the target time.
 
+    def update_particle(self, particle, best_particle, lock):
+        particle.updateVelocity(best_particle[0], self.w, self.c1, self.c2)
+        particle.updatePosition()
+        cost = particle.calcCost(self.oldLidarScan, self.newLidarScan, self.sections)
+        with lock:
+            if best_particle[0] is None or cost < best_particle[0].cost:
+                best_particle[0] = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
+                best_particle[0].cost = cost
+
     def run(self, analytics: bool = False):
         startTime = time.time()
         lastIterTime = 0.0
@@ -82,16 +91,6 @@ class PSO:
         manager = multiprocessing.Manager()
         best_particle = manager.list([None])
         lock = manager.Lock()
-
-        # Define the particle update function
-        def update_particle(particle):
-            particle.updateVelocity(best_particle[0], self.w, self.c1, self.c2)
-            particle.updatePosition()
-            cost = particle.calcCost(self.oldLidarScan, self.newLidarScan, self.sections)
-            with lock:
-                if best_particle[0] is None or cost < best_particle[0].cost:
-                    best_particle[0] = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
-                    best_particle[0].cost = cost
 
         initTime = time.time() - startTime
         self.remainingTime = self.remainingTime - initTime
@@ -104,7 +103,7 @@ class PSO:
 
             # Update particles in parallel using Pool
             with multiprocessing.Pool(processes=4) as pool:
-                pool.map(update_particle, self.particles)
+                pool.starmap(self.update_particle, [(particle, best_particle, lock) for particle in self.particles])
 
             self.best_particle = best_particle[0]
             lastIterTime = time.time() - iterationRunTime
