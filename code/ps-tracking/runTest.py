@@ -16,7 +16,7 @@ if not all(["Parameter" in parameters_df.columns, "ValueList" in parameters_df.c
     raise ValueError("Invalid structure in parameters.csv")
 
 # Convert parameters to a dictionary of lists
-parameters = {row["Parameter"]: eval(row["ValueList"]) for _, row in parameters_df.iterrows()}
+parameters = {row["Parameter"]: list(map(float, row["ValueList"].split(','))) for _, row in parameters_df.iterrows()}
 
 # Generate all combinations of parameters
 parameter_combinations = list(itertools.product(*parameters.values()))
