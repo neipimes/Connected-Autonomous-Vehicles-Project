@@ -18,6 +18,11 @@ if not all(["Parameter" in parameters_df.columns, "ValueList" in parameters_df.c
 # Convert parameters to a dictionary of lists
 parameters = {row["Parameter"]: list(map(float, row["ValueList"].split(','))) for _, row in parameters_df.iterrows()}
 
+# Convert values to proper types
+for key in ['swarmSize', 'segments', 'motorPWM']:
+    if key in parameters:
+        parameters[key] = [int(v) for v in parameters[key]]
+
 # Generate all combinations of parameters
 parameter_combinations = list(itertools.product(*parameters.values()))
 
@@ -37,7 +42,7 @@ def run_tracker(params):
     # Cache calculated targetTime
     if params['motorPWM'] not in target_time_cache:
         freq = LIDAR_PWM_TO_TIME[params['motorPWM']]
-        target_time_cache[params['motorPWM']] = 1 / (freq * 1.15)
+        target_time_cache[params['motorPWM']] = int(1 / (freq * 1.15))
 
     # Use cached targetTime
     target_time = target_time_cache[params['motorPWM']]
