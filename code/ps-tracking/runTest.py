@@ -75,7 +75,7 @@ try:
     # Sequential testing process
     results = []
     for params in parameter_dicts:
-        print(f"Testing parameters: {params}")
+        print(f"Testing parameters: {params}, targetTime: {target_time_cache[params['motorPWM']]}")
         results.append(run_tracker(params))
 finally:
     if results:
