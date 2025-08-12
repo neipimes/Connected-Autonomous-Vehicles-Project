@@ -1,6 +1,7 @@
 from Particle import Particle
 import numpy as np
 import copy, time
+import multiprocessing
 
 class PSO:
     def __init__(self, swarmSize: int, w: float, c1: float, c2: float, 
@@ -19,6 +20,8 @@ class PSO:
         self.oldLidarScan = oldLidarScan
         self.newLidarScan = newLidarScan
         self.sections = sections
+
+        self.targetTime = targetTime
         
         self.particles = []
         self.best_particle = None
@@ -34,14 +37,36 @@ class PSO:
             particle = Particle(x, y, angle)
             self.particles.append(particle)
 
-        # Calculate costs for each particle
-        for particle in self.particles:
-            cost = particle.calcCost(self.oldLidarScan, self.newLidarScan, self.sections)
-            if self.best_particle is None or cost < self.best_particle.cost:
-                # Create a new copy of the best particle and set its cost.
-                self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
-                self.best_particle.cost = cost
-        
+        # Calculate costs for each particle in parallel
+        def calculate_costs(particles_chunk, best_particle, lock):
+            for particle in particles_chunk:
+                cost = particle.calcCost(self.oldLidarScan, self.newLidarScan, self.sections)
+                with lock:
+                    if best_particle[0] is None or cost < best_particle[0].cost:
+                        best_particle[0] = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
+                        best_particle[0].cost = cost
+
+        # Define shared objects and variables for parallel processing
+        manager = multiprocessing.Manager()
+        best_particle = manager.list([None])
+        lock = manager.Lock()
+        num_processors = 4
+        chunk_size = len(self.particles) // num_processors
+
+        processes = []
+        for i in range(num_processors):
+            start_idx = i * chunk_size
+            end_idx = (i + 1) * chunk_size if i < num_processors - 1 else len(self.particles)
+            chunk = self.particles[start_idx:end_idx]
+            p = multiprocessing.Process(target=calculate_costs, args=(chunk, best_particle, lock))
+            processes.append(p)
+            p.start()
+
+        for p in processes:
+            p.join()
+
+        self.best_particle = best_particle[0]
+
         initTime = time.time() - startTime
 
         self.remainingTime = targetTime - initTime 
@@ -52,21 +77,38 @@ class PSO:
         startTime = time.time()
         lastIterTime = 0.0
         iterCount = 0
-        while time.time() - startTime < self.remainingTime - lastIterTime: 
-            # Run until the remaining time is up and a new scan will be available.
-            # Don't start a new iteration if the last one took long enough that it would exceed the remaining time.
+
+        # Initialize shared objects and variables for parallel processing
+        manager = multiprocessing.Manager()
+        best_particle = manager.list([None])
+        lock = manager.Lock()
+
+        # Define the particle update function
+        def update_particle(particle):
+            particle.updateVelocity(best_particle[0], self.w, self.c1, self.c2)
+            particle.updatePosition()
+            cost = particle.calcCost(self.oldLidarScan, self.newLidarScan, self.sections)
+            with lock:
+                if best_particle[0] is None or cost < best_particle[0].cost:
+                    best_particle[0] = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
+                    best_particle[0].cost = cost
+
+        initTime = time.time() - startTime
+        self.remainingTime = self.remainingTime - initTime
+
+        startTime = time.time()
+
+        while time.time() - startTime < self.remainingTime - lastIterTime:
             iterationRunTime = time.time()
             iterCount += 1
-            for particle in self.particles:
-                # Update particle velocity and position
-                particle.updateVelocity(self.best_particle, self.w, self.c1, self.c2)
-                particle.updatePosition()
-                # Calculate cost for the new position
-                cost = particle.calcCost(self.oldLidarScan, self.newLidarScan, self.sections)
-                if self.best_particle is None or cost < self.best_particle.cost:
-                    self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
-                    self.best_particle.cost = cost
+
+            # Update particles in parallel using Pool
+            with multiprocessing.Pool(processes=4) as pool:
+                pool.map(update_particle, self.particles)
+
+            self.best_particle = best_particle[0]
             lastIterTime = time.time() - iterationRunTime
+
         totalTime = time.time() - startTime
 
         # Return the best particle's position, angle, cost, total time taken and iteration count.
