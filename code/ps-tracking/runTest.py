@@ -75,7 +75,7 @@ try:
     # Sequential testing process
     results = []
     for params in parameter_dicts:
-        print(f"Testing parameters: {params}, targetTime: {LIDAR_PWM_TO_TIME[params['motorPWM']]}")
+        print(f"Testing parameters: {params}, targetTime: {(1/(LIDAR_PWM_TO_TIME[params['motorPWM']] * 1.15))}")
         results.append(run_tracker(params))
 finally:
     if results:
