@@ -64,6 +64,7 @@ class PSTracker:
             raise ConnectionError("LiDAR connection failed.")
         # Lidar starts on initialization, so we don't need to call start() here.
         self.lidar.motor_speed = motorPWM # Set motor speed in PWM value (0-1023)
+        self.lidar.start_motor()
         time.sleep(5) # Allow some time for the LiDAR to start up and stabilize.
         #self.lidar.reset()  # Clear any initial data from the LiDAR.
         
