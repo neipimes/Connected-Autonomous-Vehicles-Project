@@ -60,7 +60,11 @@ def run_tracker(params):
         targetTime=target_time
     )
 
-    x, y, angle, avg_iterations, avg_cost = tracker.start(testing=True, duration=30, useOriginScan=True)
+    try:
+        x, y, angle, avg_iterations, avg_cost = tracker.start(testing=True, duration=30, useOriginScan=True)
+    except KeyboardInterrupt:
+        tracker.close()
+
     distance = math.sqrt(x**2 + y**2)
 
     return {
