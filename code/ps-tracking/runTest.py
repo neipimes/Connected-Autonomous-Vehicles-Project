@@ -1,3 +1,4 @@
+from numpy import mod
 import pandas as pd
 import itertools
 import time
@@ -60,31 +61,39 @@ def run_tracker(params):
     return {
         'parameters': params,
         'distance': distance,
+        'angle_error': mod(angle, 360),
         'avg_iterations': avg_iterations,
         'avg_cost': avg_cost
     }
 
-# Sequential testing process
-results = []
-for params in parameter_dicts:
-    results.append(run_tracker(params))
+try:
+    # Sequential testing process
+    results = []
+    for params in parameter_dicts:
+        print(f"Testing parameters: {params}")
+        results.append(run_tracker(params))
+finally:
+    if results:
+        # Save results to JSON file
+        results_file = "results.json"
+        with open(results_file, mode='w') as file:
+            json.dump(results, file, indent=4)
+        
+        # Find optimal parameters
+        optimal_result = min(results, key=lambda x: x['distance'])
 
-# Save results to JSON file
-results_file = "results.json"
-with open(results_file, mode='w') as file:
-    json.dump(results, file, indent=4)
+        print("Optimal Parameters:")
+        print(optimal_result['parameters'])
+        print(f"Distance: {optimal_result['distance']:.2f}")
+        print(f"Average Iterations: {optimal_result['avg_iterations']:.2f}")
+        print(f"Average Cost: {optimal_result['avg_cost']:.2f}")
 
-# Find optimal parameters
-optimal_result = min(results, key=lambda x: x['distance'])
+        # Log optimal parameters to a file
+        optimal_result_file = "optimal_parameters.json"
+        with open(optimal_result_file, mode='w') as file:
+            json.dump(optimal_result, file, indent=4)
+    else:
+        print("No valid results found.")
 
-print("Optimal Parameters:")
-print(optimal_result['parameters'])
-print(f"Distance: {optimal_result['distance']:.2f}")
-print(f"Average Iterations: {optimal_result['avg_iterations']:.2f}")
-print(f"Average Cost: {optimal_result['avg_cost']:.2f}")
 
-# Log optimal parameters to a file
-optimal_result_file = "optimal_parameters.json"
-with open(optimal_result_file, mode='w') as file:
-    json.dump(optimal_result, file, indent=4)
 
