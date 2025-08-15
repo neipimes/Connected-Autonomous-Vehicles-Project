@@ -42,9 +42,9 @@ class PSO:
                 self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
                 self.best_particle.cost = cost
 
-        initTime = time.time() - self.trueStartTime
+        self.initTime = time.time() - self.trueStartTime
 
-        self.remainingTime = targetTime - initTime 
+        self.remainingTime = targetTime - self.initTime 
         # How long we have left to run the PSO algorithm due to Lidar constraints.
         # Remaining time should be a conservative estimate to ensure we don't exceed the target time.
 
@@ -73,4 +73,4 @@ class PSO:
         # Return the best particle's position, angle, cost, total time taken and iteration count.
         return ({'x': self.best_particle.x, 'y': self.best_particle.y, 'angle': self.best_particle.angle,
                 'cost': self.best_particle.cost, 'totalTime': totalTime, 'iterCount': iterCount,
-                'trueTotalTime': trueTotalTime})
+                'trueTotalTime': trueTotalTime, 'initTime': self.initTime})
