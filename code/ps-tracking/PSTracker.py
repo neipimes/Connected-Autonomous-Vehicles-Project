@@ -190,6 +190,7 @@ class PSTracker:
             imu_process.start()
             self._logger.info("IMU readings process started.")
 
+            cycleEndTime = None
             originScan = None
             priorScan = None
             start_time = time.time() if duration else None
@@ -198,6 +199,12 @@ class PSTracker:
             if noLidar == False:
                 for scan in self.lidar.iter_scans():
                     psoStartTime = time.time()
+
+                    if cycleEndTime is not None:
+                        scanGapTime = psoStartTime - cycleEndTime
+                        # This time metric could possibly be used to dynamically adjust the target time value.
+                    else:
+                        scanGapTime = 0.0
 
                     if duration and time.time() - start_time >= duration:
                         self._logger.info(f"Duration reached. Terminating PSTracker loop after {time.time() - start_time:.2f} seconds.")
@@ -266,6 +273,7 @@ class PSTracker:
                                 f"True Total Time: {results['trueTotalTime']:.4f} s\n"
                                 f"Init Time: {results['initTime']:.4f} s\n"
                                 f"Outer Run Time: {outerRunTime:.4f} s\n"
+                                f"Time gap between scans: {scanGapTime:.4f} s\n"
                                 f"-------------------\n"
                             )
 
@@ -279,6 +287,8 @@ class PSTracker:
                         imu_process.terminate()
                         imu_process.join()
                         break
+
+                    cycleEndTime = time.time()
 
         except Exception as e:
             print(e)
@@ -323,7 +333,7 @@ def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PSTracker Command Line Options")
-    parser.add_argument('--swarmSize', type=int, default=10, help='Number of particles in the swarm')
+    parser.add_argument('--swarmSize', type=int, default=10, help='Number of particles in the swarm (default: 10)')
     parser.add_argument('--w', type=float, default=0.3, help='Inertia weight for PSO')
     parser.add_argument('--c1', type=float, default=0.8, help='Cognitive coefficient for PSO')
     parser.add_argument('--c2', type=float, default=2.5, help='Social coefficient for PSO')
