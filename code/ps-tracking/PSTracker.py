@@ -262,10 +262,10 @@ class PSTracker:
                                 f"Y: {yLocation.value:.2f}\n"
                                 f"Angle: {angle.value:.2f}\n"
                                 f"Iterations: {results['iterCount']}\n"
-                                f"Cost: {results['cost']:.2f}\n"
-                                f"True Total Time: {results['trueTotalTime']:.2f} s\n"
-                                f"Init Time: {results['initTime']:.2f} s\n"
-                                f"Outer Run Time: {outerRunTime:.2f} s\n"
+                                f"Cost: {results['cost']:.4f}\n"
+                                f"True Total Time: {results['trueTotalTime']:.4f} s\n"
+                                f"Init Time: {results['initTime']:.4f} s\n"
+                                f"Outer Run Time: {outerRunTime:.4f} s\n"
                                 f"-------------------\n"
                             )
 
