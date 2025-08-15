@@ -240,7 +240,9 @@ class PSTracker:
                     )
 
                     # Run the PSO algorithm
+                    psoStartTime = time.time()
                     results = pso.run()
+                    outerRunTime = time.time() - psoStartTime
                     priorScan = lidar_scan
 
                     # Update x, y and angle based on the best particle's position
@@ -253,7 +255,16 @@ class PSTracker:
                         # Debugging output
                         if debug:
                             print(
-                                f"PSO Results: X={xLocation.value:.2f}, Y={yLocation.value:.2f}, Angle={angle.value:.2f}, Iterations={results['iterCount']}, Cost={results['cost']:.2f}, TrueTotalTime={results['trueTotalTime']:.2f}, InitTime={results['initTime']:.2f}"
+                                f"\n--- PSO Results ---\n"
+                                f"X: {xLocation.value:.2f}\n"
+                                f"Y: {yLocation.value:.2f}\n"
+                                f"Angle: {angle.value:.2f}\n"
+                                f"Iterations: {results['iterCount']}\n"
+                                f"Cost: {results['cost']:.2f}\n"
+                                f"True Total Time: {results['trueTotalTime']:.2f} s\n"
+                                f"Init Time: {results['initTime']:.2f} s\n"
+                                f"Outer Run Time: {outerRunTime:.2f} s\n"
+                                f"-------------------\n"
                             )
 
                         if testing:
