@@ -253,7 +253,7 @@ class PSTracker:
                         # Debugging output
                         if debug:
                             print(
-                                f"PSO Results: X={xLocation.value:.2f}, Y={yLocation.value:.2f}, Angle={angle.value:.2f}, Iterations={results['iterCount']}, Cost={results['cost']:.2f}"
+                                f"PSO Results: X={xLocation.value:.2f}, Y={yLocation.value:.2f}, Angle={angle.value:.2f}, Iterations={results['iterCount']}, Cost={results['cost']:.2f}, TrueTotalTime={results['trueTotalTime']:.2f}"
                             )
 
                         if testing:

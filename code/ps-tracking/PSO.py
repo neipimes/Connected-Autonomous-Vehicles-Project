@@ -8,7 +8,7 @@ class PSO:
                  imuYReading: float = 0.0, imuAngleReading: float = 0.0, xNoise: float = 0.1, yNoise: float = 0.1, 
                  angleNoise: float = 0.05, targetTime: float = 0.1):
         
-        startTime = time.time()
+        self.trueStartTime = time.time()
         
         # Initialize parameters
         self.swarmSize = swarmSize
@@ -41,8 +41,8 @@ class PSO:
                 # Create a new copy of the best particle and set its cost.
                 self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
                 self.best_particle.cost = cost
-        
-        initTime = time.time() - startTime
+
+        initTime = time.time() - self.trueStartTime
 
         self.remainingTime = targetTime - initTime 
         # How long we have left to run the PSO algorithm due to Lidar constraints.
@@ -68,7 +68,9 @@ class PSO:
                     self.best_particle.cost = cost
             lastIterTime = time.time() - iterationRunTime
         totalTime = time.time() - startTime
+        trueTotalTime = time.time() - self.trueStartTime
 
         # Return the best particle's position, angle, cost, total time taken and iteration count.
         return ({'x': self.best_particle.x, 'y': self.best_particle.y, 'angle': self.best_particle.angle,
-                'cost': self.best_particle.cost, 'totalTime': totalTime, 'iterCount': iterCount})
+                'cost': self.best_particle.cost, 'totalTime': totalTime, 'iterCount': iterCount,
+                'trueTotalTime': trueTotalTime})
