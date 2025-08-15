@@ -197,6 +197,8 @@ class PSTracker:
             # Continuously read lidar scans and run PSO
             if noLidar == False:
                 for scan in self.lidar.iter_scans():
+                    psoStartTime = time.time()
+
                     if duration and time.time() - start_time >= duration:
                         self._logger.info(f"Duration reached. Terminating PSTracker loop after {time.time() - start_time:.2f} seconds.")
                         break
@@ -240,7 +242,7 @@ class PSTracker:
                     )
 
                     # Run the PSO algorithm
-                    psoStartTime = time.time()
+                    
                     results = pso.run()
                     outerRunTime = time.time() - psoStartTime
                     priorScan = lidar_scan
