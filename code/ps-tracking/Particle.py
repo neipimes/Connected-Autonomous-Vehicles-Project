@@ -108,6 +108,23 @@ class Particle:
         This method should compare the expected lidar measurements with the actual ones.
         """
 
+        # Old implementation (commented out for reference)
+        # expectedScan = self.calcEstLidarMeasurements(oldLidarScan)
+        # bin_edges = np.linspace(0, 360, sections + 1)
+        # expected_bins = np.digitize(expectedScan[:, 1], bin_edges) - 1
+        # new_bins = np.digitize(newLidarScan[:, 1], bin_edges) - 1
+        # segmentCosts = np.zeros(sections)
+        # for i in range(sections):
+        #     expectedSegment = expectedScan[expected_bins == i]
+        #     newSegment = newLidarScan[new_bins == i]
+        #     if expectedSegment.size == 0 or newSegment.size == 0:
+        #         continue
+        #     distances = np.abs(expectedSegment[:, 2].mean() - newSegment[:, 2].mean())
+        #     segmentCosts[i] = distances
+        # totalCost = np.sum(segmentCosts)
+        # if sections > 0:
+        #     totalCost /= sections
+
         if not isinstance(newLidarScan, np.ndarray) or newLidarScan.ndim != 2 or newLidarScan.shape[1] != 3:
             raise ValueError("newLidarScan must be a Nx3 numpy array.")
         
@@ -121,20 +138,15 @@ class Particle:
         expected_bins = np.digitize(expectedScan[:, 1], bin_edges) - 1
         new_bins = np.digitize(newLidarScan[:, 1], bin_edges) - 1
 
-        segmentCosts = np.zeros(sections)
-        for i in range(sections):
-            expectedSegment = expectedScan[expected_bins == i]
-            newSegment = newLidarScan[new_bins == i]
-            if expectedSegment.size == 0 or newSegment.size == 0: # No data in this segment
-                continue
-            # For efficiency, compare mean distances in each segment
-            distances = np.abs(expectedSegment[:, 2].mean() - newSegment[:, 2].mean())
-            segmentCosts[i] = distances
+        # Calculate mean distances for each bin
+        expected_means = np.array([expectedScan[expected_bins == i, 2].mean() if np.any(expected_bins == i) else 0 for i in range(sections)])
+        new_means = np.array([newLidarScan[new_bins == i, 2].mean() if np.any(new_bins == i) else 0 for i in range(sections)])
 
-        totalCost = np.sum(segmentCosts)
-        # Normalize the cost by the number of segments
-        if sections > 0:
-            totalCost /= sections
+        # Compute segment costs using absolute differences
+        segmentCosts = np.abs(expected_means - new_means)
+
+        # Calculate total cost and normalize by the number of segments
+        totalCost = np.sum(segmentCosts) / sections if sections > 0 else np.sum(segmentCosts)
 
         # Set and return the cost
         self.cost = totalCost
