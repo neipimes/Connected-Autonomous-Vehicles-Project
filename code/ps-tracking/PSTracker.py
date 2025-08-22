@@ -238,13 +238,17 @@ class PSTracker:
                             imuYReading = copy.deepcopy(yLocation.value)
                             imuAngleReading = copy.deepcopy(angle.value)
 
+                        self._logger.info("Starting PSO estimation thread with initial IMU readings.")
                         psoThread = mt.Thread(target=self.doPSOEstimation, args=(imuXReading, imuYReading, imuAngleReading, lidarScan, priorScan, resultsQueue))
                         psoThread.start()
+                        self._logger.info("PSO estimation thread started.")
                         runCounter += 1
                         continue
 
 
                     if resultsQueue.qsize() == 1:
+                        resultTiming = 0
+                        resultReceived = time.time()
                         # Result from thread received, need to process it.
                         results = resultsQueue.get()
                         self._logger.info(f"Received PSO result: {results}")
@@ -269,6 +273,7 @@ class PSTracker:
                                     f"Init Time: {results['initTime']:.4f} s\n"
                                     f"Outer Run Time: Needs reimplementation.\n"
                                     f"Time gap between scans: Needs reimplementation.\n"
+                                    f"Last Result Timing: {resultTiming:.4f} s\n"
                                     f"-------------------\n"
                                 )
 
@@ -298,6 +303,8 @@ class PSTracker:
                         priorScan = copy.deepcopy(lidarScan)
 
                         runCounter += 1
+                        endResultsTime = time.time()
+                        resultTiming = endResultsTime - resultReceived
 
                         if self.globalStop:
                             self._logger.info("Global stop signal received. Terminating PSTracker loop.")
