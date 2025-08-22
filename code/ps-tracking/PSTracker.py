@@ -64,9 +64,10 @@ class PSTracker:
         if self.lidar is None:
             self._logger.error("Failed to connect to LiDAR. Please check the connection.")
             raise ConnectionError("LiDAR connection failed.")
-        # Lidar starts on initialization, so we don't need to call start() here.
+        # Lidar starts on initialization, so we don't need to call start() here. OR MAYBE WE DO???
+        #self.lidar.start(scan_type='express')
         self.lidar.motor_speed = motorPWM # Set motor speed in PWM value (0-1023)
-        self.lidar.start_motor()
+        #self.lidar.start_motor()
         time.sleep(5) # Allow some time for the LiDAR to start up and stabilize.
         #self.lidar.reset()  # Clear any initial data from the LiDAR.
         
@@ -201,11 +202,11 @@ class PSTracker:
             start_time = time.time() if duration else None
 
             # Clear lidar input to ensure no stale data
-            self.lidar.reset()
+            #self.lidar.reset()
 
             # Continuously read lidar scans and run PSO
             if noLidar == False:
-                for scan in self.lidar.iter_scans(max_buf_meas=100000): # Increased buffer size for initial setup.
+                for scan in self.lidar.iter_scans(max_buf_meas=3000, scan_type='express'): # Increased buffer size for initial setup.
 
                     # Convert scan to numpy array
                     lidarScan = np.array(scan)
