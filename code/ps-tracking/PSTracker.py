@@ -178,7 +178,7 @@ class PSTracker:
             angle = mp.Value('d', 0.0)
             psoUpdate = mp.Value('i', 0)  # Integer for PSO update flag (1=True, 0=False)
             mutex = mp.Lock()  # Mutex for thread-safe access to IMU readings
-            resultsQueue = Queue()  # Queue for results from PSO runs
+            resultsQueue = Queue(maxsize=1)  # Queue for results from PSO runs
             runCounter = 0
             psoThread = None
 
@@ -208,12 +208,14 @@ class PSTracker:
                     lidarScan = np.array(scan)
 
                     if runCounter == 0:
+                        print("First scan...") if debug else None
                         # Store the first scan as the initial scan and continue to next iteration
                         priorScan = copy.deepcopy(lidarScan)
                         originScan = copy.deepcopy(lidarScan)
                         runCounter += 1
                         continue
                     elif runCounter == 1:
+                        print("Second run") if debug else None
                         # Start a PSO thread with originScan checking.
                         if useOriginScan:
                             # Use the original scan as the prior scan
@@ -231,7 +233,7 @@ class PSTracker:
                         continue
 
 
-                    if resultsQueue.qsize() != 0:
+                    if resultsQueue.qsize() == 1:
                         # Result from thread received, need to process it.
                         results = resultsQueue.get()
                         self._logger.info(f"Received PSO result: {results}")
