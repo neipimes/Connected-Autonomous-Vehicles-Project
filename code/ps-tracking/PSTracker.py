@@ -197,6 +197,7 @@ class PSTracker:
             priorScan = None
             firstScanTime = None
             secondScanTime = None
+            resultTiming = 0
             start_time = time.time() if duration else None
 
             # Clear lidar input to ensure no stale data
@@ -247,7 +248,6 @@ class PSTracker:
 
 
                     if resultsQueue.qsize() == 1:
-                        resultTiming = 0
                         resultReceived = time.time()
                         # Result from thread received, need to process it.
                         results = resultsQueue.get()
