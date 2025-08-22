@@ -225,7 +225,7 @@ class PSTracker:
                             imuYReading = copy.deepcopy(yLocation.value)
                             imuAngleReading = copy.deepcopy(angle.value)
 
-                        psoThread = mt.Thread(target=PSTracker.doPSOEstimation, args=(self, imuXReading, imuYReading, imuAngleReading, lidarScan, priorScan, resultsQueue))
+                        psoThread = mt.Thread(target=self.doPSOEstimation, args=(imuXReading, imuYReading, imuAngleReading, lidarScan, priorScan, resultsQueue))
                         psoThread.start()
                         runCounter += 1
                         continue
@@ -279,7 +279,7 @@ class PSTracker:
                             priorScan = copy.deepcopy(originScan)
 
                         # Start a new PSO thread
-                        psoThread = mt.Thread(target=self.doPSOEstimation, args=(self, imuXReading, imuYReading, imuAngleReading, lidarScan, priorScan, resultsQueue))
+                        psoThread = mt.Thread(target=self.doPSOEstimation, args=(imuXReading, imuYReading, imuAngleReading, lidarScan, priorScan, resultsQueue))
                         psoThread.start()
 
                         priorScan = copy.deepcopy(lidarScan)
