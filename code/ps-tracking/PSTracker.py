@@ -4,8 +4,10 @@ from PSO import PSO
 import numpy as np
 from rplidar import RPLidar
 import multiprocessing as mp
+import threading as mt
 import time, copy, logging, os, sys
 import argparse
+from queue import Queue
 
 # Start logging using the logging directory in home directory.
 logging.basicConfig(filename=os.path.expanduser("~/logs/pstracker.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -179,6 +181,9 @@ class PSTracker:
             angle = mp.Value('d', 0.0)
             psoUpdate = mp.Value('i', 0)  # Integer for PSO update flag (1=True, 0=False)
             mutex = mp.Lock()  # Mutex for thread-safe access to IMU readings
+            resultsQueue = Queue()  # Queue for results from PSO runs
+            runCounter = 0
+            psoThread = None
 
             # Testing variables
             avgIterations = 0
@@ -198,97 +203,100 @@ class PSTracker:
             # Continuously read lidar scans and run PSO
             if noLidar == False:
                 for scan in self.lidar.iter_scans():
-                    psoStartTime = time.time()
-
-                    if cycleEndTime is not None:
-                        scanGapTime = psoStartTime - cycleEndTime
-                        # This time metric could possibly be used to dynamically adjust the target time value.
-                    else:
-                        scanGapTime = 0.0
-
-                    if duration and time.time() - start_time >= duration:
-                        self._logger.info(f"Duration reached. Terminating PSTracker loop after {time.time() - start_time:.2f} seconds.")
-                        break
 
                     # Convert scan to numpy array
-                    lidar_scan = np.array(scan)
+                    lidarScan = np.array(scan)
 
-                    # Check if this is the first scan
-                    if priorScan is None:
+                    if runCounter == 0:
                         # Store the first scan as the initial scan and continue to next iteration
-                        priorScan = lidar_scan
-                        originScan = lidar_scan
+                        priorScan = copy.deepcopy(lidarScan)
+                        originScan = copy.deepcopy(lidarScan)
+                        runCounter += 1
+                        continue
+                    elif runCounter == 1:
+                        # Start a PSO thread with originScan checking.
+                        if useOriginScan:
+                            # Use the original scan as the prior scan
+                            priorScan = copy.deepcopy(originScan)
+
+                        # Grab most up-to-date IMU readings using a mutex to ensure thread safety.
+                        with mutex:
+                            imuXReading = copy.deepcopy(xLocation.value)
+                            imuYReading = copy.deepcopy(yLocation.value)
+                            imuAngleReading = copy.deepcopy(angle.value)
+
+                        psoThread = mt.Thread(target=PSTracker.doPSOEstimation, args=(imuXReading, imuYReading, imuAngleReading, lidarScan, priorScan, resultsQueue))
+                        psoThread.start()
+                        runCounter += 1
                         continue
 
-                    # Grab most up-to-date IMU readings using a mutex to ensure thread safety.
-                    with mutex:
-                        imuXReading = copy.deepcopy(xLocation.value)
-                        imuYReading = copy.deepcopy(yLocation.value)
-                        imuAngleReading = copy.deepcopy(angle.value)
 
-                    # Create a PSO instance with the current lidar scan and IMU readings
-                    if useOriginScan:
-                        # Use the original scan as the prior scan
-                        priorScan = originScan
+                    if not resultsQueue.empty():
+                        psoThread.join() if psoThread else None
+                        # Result from thread received, need to process it.
+                        results = resultsQueue.get()
+                        self._logger.info(f"Received PSO result: {results}")
 
-                    pso = PSO(
-                        swarmSize=self.swarmSize,
-                        w=self.w,
-                        c1=self.c1,
-                        c2=self.c2,
-                        oldLidarScan=priorScan,
-                        newLidarScan=lidar_scan,
-                        sections=self.sections,
-                        xNoise=self.xNoise,
-                        yNoise=self.yNoise,
-                        angleNoise=self.angleNoise,
-                        imuXReading=imuXReading,
-                        imuYReading=imuYReading,
-                        imuAngleReading=imuAngleReading,
-                        targetTime=self.targetTime
-                    )
+                        # Update x, y and angle based on the best particle's position
+                        with mutex:
+                            xLocation.value = results["x"]
+                            yLocation.value = results["y"]
+                            angle.value = results["angle"]
+                            psoUpdate.value = 1  # 1 means True (update needed)
 
-                    # Run the PSO algorithm
-                    
-                    results = pso.run()
-                    outerRunTime = time.time() - psoStartTime
-                    priorScan = lidar_scan
+                            # Debugging output
+                            if debug:
+                                print(
+                                    f"\n--- PSO Results ---\n"
+                                    f"X: {xLocation.value:.2f}\n"
+                                    f"Y: {yLocation.value:.2f}\n"
+                                    f"Angle: {angle.value:.2f}\n"
+                                    f"Iterations: {results['iterCount']}\n"
+                                    f"Cost: {results['cost']:.4f}\n"
+                                    f"True Total Time: {results['trueTotalTime']:.4f} s\n"
+                                    f"Init Time: {results['initTime']:.4f} s\n"
+                                    f"Outer Run Time: Needs reimplementation.\n"
+                                    f"Time gap between scans: Needs reimplementation.\n"
+                                    f"-------------------\n"
+                                )
 
-                    # Update x, y and angle based on the best particle's position
-                    with mutex:
-                        xLocation.value = results["x"]
-                        yLocation.value = results["y"]
-                        angle.value = results["angle"]
-                        psoUpdate.value = 1  # 1 means True (update needed)
+                            if testing:
+                                runCount += 1
+                                avgIterations += results['iterCount']
+                                avgCost += results['cost']
 
-                        # Debugging output
-                        if debug:
-                            print(
-                                f"\n--- PSO Results ---\n"
-                                f"X: {xLocation.value:.2f}\n"
-                                f"Y: {yLocation.value:.2f}\n"
-                                f"Angle: {angle.value:.2f}\n"
-                                f"Iterations: {results['iterCount']}\n"
-                                f"Cost: {results['cost']:.4f}\n"
-                                f"True Total Time: {results['trueTotalTime']:.4f} s\n"
-                                f"Init Time: {results['initTime']:.4f} s\n"
-                                f"Outer Run Time: {outerRunTime:.4f} s\n"
-                                f"Time gap between scans: {scanGapTime:.4f} s\n"
-                                f"-------------------\n"
-                            )
+                        if duration and time.time() - start_time >= duration:
+                            self._logger.info(f"Duration reached. Terminating PSTracker loop after {time.time() - start_time:.2f} seconds.")
+                            break
 
-                        if testing:
-                            runCount += 1
-                            avgIterations += results['iterCount']
-                            avgCost += results['cost']
+                        # Grab most up-to-date IMU readings using a mutex to ensure thread safety.
+                        with mutex:
+                            imuXReading = copy.deepcopy(xLocation.value)
+                            imuYReading = copy.deepcopy(yLocation.value)
+                            imuAngleReading = copy.deepcopy(angle.value)
 
-                    if self.globalStop:
-                        self._logger.info("Global stop signal received. Terminating PSTracker loop.")
-                        imu_process.terminate()
-                        imu_process.join()
-                        break
+                        if useOriginScan:
+                            # Use the original scan as the prior scan
+                            priorScan = copy.deepcopy(originScan)
 
-                    cycleEndTime = time.time()
+                        # Start a new PSO thread
+                        psoThread = mt.Thread(target=self.doPSOEstimation, args=(imuXReading, imuYReading, imuAngleReading, lidarScan, priorScan, resultsQueue))
+                        psoThread.start()
+
+                        priorScan = copy.deepcopy(lidarScan)
+
+                        runCounter += 1
+
+                        if self.globalStop:
+                            self._logger.info("Global stop signal received. Terminating PSTracker loop.")
+                            imu_process.terminate()
+                            imu_process.join()
+                            psoThread.join() if psoThread else None
+                            break
+
+                    else:
+                        # No update, drop the current LiDAR scan.
+                        continue
 
         except Exception as e:
             print(e)
@@ -299,6 +307,34 @@ class PSTracker:
 
         return (xLocation.value, yLocation.value, angle.value, avgIterations / runCount if testing and runCount > 0 else 0, avgCost / runCount if testing and runCount > 0 else 0)
 
+    def doPSOEstimation(self, imuX, imuY, imuAngle, lidarScan, priorScan, resultsQueue: Queue):
+        '''
+        Performs a PSO estimation run from provided readings and PSTracker attributes.
+        Runs as a thread in the start() function, and returns new estimates for the position and angle.
+        '''
+        # Create a new PSO instance with the provided IMU readings
+        pso = PSO(
+            swarmSize=self.swarmSize,
+            w=self.w,
+            c1=self.c1,
+            c2=self.c2,
+            oldLidarScan=priorScan,
+            newLidarScan=lidarScan,
+            sections=self.sections,
+            xNoise=self.xNoise,
+            yNoise=self.yNoise,
+            angleNoise=self.angleNoise,
+            imuXReading=imuX,
+            imuYReading=imuY,
+            imuAngleReading=imuAngle,
+            targetTime=self.targetTime
+        )
+
+        # Run the PSO algorithm
+        results = pso.run()
+
+        # Add results to queue
+        resultsQueue.put(results)
 
     def close(self):
         """
