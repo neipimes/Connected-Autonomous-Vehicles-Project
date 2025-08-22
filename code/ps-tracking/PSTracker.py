@@ -171,9 +171,6 @@ class PSTracker:
         """
         self._logger.info("Starting PSTracker loop...")
 
-        # Clear lidar input to ensure no stale data
-        #self.lidar.reset()
-
         try:
             # Create shared variables for IMU and PSO readings.
             xLocation = mp.Value('d', 0.0)  # double precision float
@@ -200,9 +197,12 @@ class PSTracker:
             priorScan = None
             start_time = time.time() if duration else None
 
+            # Clear lidar input to ensure no stale data
+            self.lidar.reset()
+
             # Continuously read lidar scans and run PSO
             if noLidar == False:
-                for scan in self.lidar.iter_scans(max_buf_meas=10000): # Increased buffer size for initial setup.
+                for scan in self.lidar.iter_scans(max_buf_meas=5000): # Increased buffer size for initial setup.
 
                     # Convert scan to numpy array
                     lidarScan = np.array(scan)
