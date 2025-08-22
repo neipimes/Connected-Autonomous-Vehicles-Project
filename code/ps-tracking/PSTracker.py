@@ -247,8 +247,9 @@ class PSTracker:
                         runCounter += 1
                         continue
 
-
+                    print("Pre queue check...") if debug else None
                     if resultsQueue.qsize() == 1:
+                        print("Result available in queue.") if debug else None
                         resultReceived = time.time()
                         # Result from thread received, need to process it.
                         results = resultsQueue.get()
@@ -304,8 +305,7 @@ class PSTracker:
                         priorScan = copy.deepcopy(lidarScan)
 
                         runCounter += 1
-                        endResultsTime = time.time()
-                        resultTiming = endResultsTime - resultReceived
+                        resultTiming = time.time() - resultReceived
 
                         if self.globalStop:
                             self._logger.info("Global stop signal received. Terminating PSTracker loop.")
