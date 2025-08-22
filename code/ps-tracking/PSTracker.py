@@ -298,7 +298,8 @@ class PSTracker:
                         continue
 
         except Exception as e:
-            print(e)
+            print(f"Error occurred: {e}")
+            e.with_traceback(sys.exc_info()[2])  # Print the traceback for debugging
             self._logger.error(f"An error occurred in PSTracker: {e}")
             imu_process.terminate()
             imu_process.join()
