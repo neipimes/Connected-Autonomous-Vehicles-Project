@@ -231,7 +231,7 @@ class PSTracker:
                         continue
 
 
-                    if resultsQueue.qsize() == 0:
+                    if resultsQueue.qsize() != 0:
                         # Result from thread received, need to process it.
                         results = resultsQueue.get()
                         self._logger.info(f"Received PSO result: {results}")
