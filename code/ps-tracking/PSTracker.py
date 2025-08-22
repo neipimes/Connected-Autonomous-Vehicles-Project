@@ -295,6 +295,7 @@ class PSTracker:
 
                     else:
                         # No update, drop the current LiDAR scan.
+                        print("No update from PSO thread, skipping.") if debug else None
                         continue
 
         except Exception as e:
