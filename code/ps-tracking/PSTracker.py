@@ -232,7 +232,6 @@ class PSTracker:
 
 
                     if not resultsQueue.empty():
-                        psoThread.join() if psoThread else None
                         # Result from thread received, need to process it.
                         results = resultsQueue.get()
                         self._logger.info(f"Received PSO result: {results}")
