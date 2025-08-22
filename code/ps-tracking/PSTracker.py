@@ -231,7 +231,7 @@ class PSTracker:
                         continue
 
 
-                    if not resultsQueue.empty():
+                    if resultsQueue.qsize() == 0:
                         # Result from thread received, need to process it.
                         results = resultsQueue.get()
                         self._logger.info(f"Received PSO result: {results}")
@@ -292,7 +292,6 @@ class PSTracker:
                             imu_process.join()
                             psoThread.join() if psoThread else None
                             break
-
                     else:
                         # No update, drop the current LiDAR scan.
                         print("No update from PSO thread, skipping.") if debug else None
