@@ -195,6 +195,8 @@ class PSTracker:
             cycleEndTime = None
             originScan = None
             priorScan = None
+            firstScanTime = None
+            secondScanTime = None
             start_time = time.time() if duration else None
 
             # Clear lidar input to ensure no stale data
@@ -209,13 +211,22 @@ class PSTracker:
 
                     if runCounter == 0:
                         print("First scan...") if debug else None
+                        self._logger.info("First scan received, storing as initial scan.")
+                        firstScanTime = time.time()
                         # Store the first scan as the initial scan and continue to next iteration
                         priorScan = copy.deepcopy(lidarScan)
                         originScan = copy.deepcopy(lidarScan)
                         runCounter += 1
                         continue
                     elif runCounter == 1:
-                        print("Second run") if debug else None
+                        print("Second scan...") if debug else None
+                        self._logger.info("Second scan received, storing as prior scan.")
+                        secondScanTime = time.time()
+                        # Calculate time taken for the first scan
+                        if firstScanTime is not None:
+                            firstScanDuration = secondScanTime - firstScanTime
+                            print(f"Time taken for first scan: {firstScanDuration:.4f} s") if debug else None
+
                         # Start a PSO thread with originScan checking.
                         if useOriginScan:
                             # Use the original scan as the prior scan
