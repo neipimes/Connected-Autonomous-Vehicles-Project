@@ -206,7 +206,7 @@ class PSTracker:
 
             # Continuously read lidar scans and run PSO
             if noLidar == False:
-                for scan in self.lidar.iter_scans(max_buf_meas=3000, scan_type='express'): # Increased buffer size for initial setup.
+                for scan in self.lidar.iter_scans(max_buf_meas=3000, scan_type='normal'): # Increased buffer size for initial setup.
 
                     # Convert scan to numpy array
                     lidarScan = np.array(scan)
