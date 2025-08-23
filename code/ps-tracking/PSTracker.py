@@ -174,9 +174,11 @@ class PSTracker:
         try:
             scan_iterator = lidar.iter_scans(max_buf_meas=3000, scan_type='normal')
 
-            # Drop the first 5 scans to ensure stable data
-            for _ in range(5):
+            # Drop the first 10 scans to ensure stable data
+            for _ in range(10):
                 next(scan_iterator)
+                print("Dropped scan")
+                sys.stdout.flush()
 
             for scan in scan_iterator:
                 lidarScan = [(quality, angle, distance) for quality, angle, distance in scan]
