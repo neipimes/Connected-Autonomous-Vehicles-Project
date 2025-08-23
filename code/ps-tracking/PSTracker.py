@@ -166,8 +166,7 @@ class PSTracker:
             yVelocity = yVelocity + yDelta * timestep                
             
 
-    @staticmethod
-    def runLidarHandler(lidar, latestScan, scanUpdatedFlag, mutex, debug=False):
+    def runLidarHandler(self, lidar, latestScan, scanUpdatedFlag, mutex, debug=False):
         """
         Continuously read LiDAR scans and store only the latest scan.
         This method runs in a separate thread or process to avoid blocking the main thread.
@@ -177,12 +176,13 @@ class PSTracker:
                 lidarScan = [(quality, angle, distance) for quality, angle, distance in scan]
                 with mutex:
                     latestScan[:] = lidarScan  # Update the shared variable with the latest scan
-                    scanUpdatedFlag.value = 1  # Signal that a new scan has been set
+                scanUpdatedFlag.value = 1  # Signal that a new scan has been set
                 if debug:
                     print("Latest LiDAR scan updated.")
                     sys.stdout.flush()
         except Exception as e:
             print(f"Error in LiDAR handler: {e}")
+            self._logger.error(f"Error in LiDAR handler: {e}")
             sys.stdout.flush()
 
     def start(self, useOriginScan: bool = False, debug: bool = False, testing: bool = False, noLidar: bool = False, duration: float = None):
@@ -213,7 +213,7 @@ class PSTracker:
             # Start LiDAR handler in a separate process
             lidarStartTime = time.time()
             if not noLidar:
-                lidar_process = mp.Process(target=PSTracker.runLidarHandler, args=(self.lidar, latestScan, scanUpdatedFlag, lidarMutex, debug))
+                lidar_process = mp.Process(target=self.runLidarHandler, args=(self.lidar, latestScan, scanUpdatedFlag, lidarMutex, debug))
                 lidar_process.start()
                 self._logger.info("LiDAR handler process started.")
             print(f"LiDAR handler started in {time.time() - lidarStartTime:.4f} s") if debug else None
