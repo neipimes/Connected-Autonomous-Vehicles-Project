@@ -203,16 +203,20 @@ class PSTracker:
             scanUpdatedFlag = mp.Value('i', 0)  # Flag to indicate if a new scan has been set
             lidarMutex = mp.Lock()  # Mutex for thread-safe access to LiDAR scans
 
+            imuProcessStartTime = time.time()
             # Start IMU readings in a separate process
             imu_process = mp.Process(target=PSTracker.runIMUReadings, args=(xLocation, yLocation, angle, psoUpdate, mutex, debug))
             imu_process.start()
             self._logger.info("IMU readings process started.")
+            print(f"IMU readings process started in {time.time() - imuProcessStartTime:.4f} s") if debug else None
 
             # Start LiDAR handler in a separate process
+            lidarStartTime = time.time()
             if not noLidar:
                 lidar_process = mp.Process(target=PSTracker.runLidarHandler, args=(self.lidar, latestScan, scanUpdatedFlag, lidarMutex, debug))
                 lidar_process.start()
                 self._logger.info("LiDAR handler process started.")
+            print(f"LiDAR handler started in {time.time() - lidarStartTime:.4f} s") if debug else None
 
             cycleEndTime = None
             originScan = None
@@ -395,6 +399,7 @@ class PSTracker:
 
     def doPSOEstimation(self, imuX, imuY, imuAngle, lidarScan, priorScan, resultsQueue: Queue):
         '''
+        TODO NOTICE: TO BE DEPRECATED
         Performs a PSO estimation run from provided readings and PSTracker attributes.
         Runs as a thread in the start() function, and returns new estimates for the position and angle.
         '''
