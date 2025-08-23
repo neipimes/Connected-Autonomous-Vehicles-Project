@@ -172,11 +172,17 @@ class PSTracker:
         This method runs in a separate thread or process to avoid blocking the main thread.
         """
         try:
-            for scan in lidar.iter_scans(max_buf_meas=3000, scan_type='normal'):
+            scan_iterator = lidar.iter_scans(max_buf_meas=3000, scan_type='normal')
+
+            # Drop the first 5 scans to ensure stable data
+            for _ in range(5):
+                next(scan_iterator)
+
+            for scan in scan_iterator:
                 lidarScan = [(quality, angle, distance) for quality, angle, distance in scan]
                 with mutex:
                     latestScan[:] = lidarScan  # Update the shared variable with the latest scan
-                scanUpdatedFlag.value = 1  # Signal that a new scan has been set
+                    scanUpdatedFlag.value = 1  # Signal that a new scan has been set
                 if debug:
                     print("Latest LiDAR scan updated.")
                     sys.stdout.flush()
