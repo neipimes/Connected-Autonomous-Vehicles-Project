@@ -237,7 +237,7 @@ class PSTracker:
                 # Wait for a new scan to be set
                 if not noLidar:
                     while scanUpdatedFlag.value == 0:
-                        time.sleep(0.0001)  # Small delay to avoid busy waiting
+                        time.sleep(0.005)  # Small delay to avoid busy waiting
 
                     with lidarMutex:
                         lidarScan = np.array(latestScan)  # Convert shared list to a 2D numpy array
