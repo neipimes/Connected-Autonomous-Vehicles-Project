@@ -193,7 +193,7 @@ class PSTracker:
             self._logger.error(f"Error in LiDAR handler: {e}")
             sys.stdout.flush()
 
-    def start(self, useOriginScan: bool = False, debug: bool = False, testing: bool = False, noLidar: bool = False, duration: float = None):
+    def start(self, useOriginScan: bool = False, debug: bool = False, testing: bool = False, noLidar: bool = False, noPSOAngle: bool = False, duration: float = None):
         """ 
         Start the PSTracker to continuously track the particle swarm.
         """
@@ -312,7 +312,8 @@ class PSTracker:
                     with mutex:
                         xLocation.value = results["x"]
                         yLocation.value = results["y"]
-                        angle.value = results["angle"]
+                        if not noPSOAngle: # Double negative but is clearer in arguments to user.
+                            angle.value = results["angle"]
                         psoUpdate.value = 1
 
                         if testing:
