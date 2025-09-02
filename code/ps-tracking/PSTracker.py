@@ -165,7 +165,7 @@ class PSTracker:
             yVelocity = yVelocity + yDelta * timestep                
             
 
-    def start(self, useOriginScan: bool = False, debug: bool = False, testing: bool = False, noLidar: bool = False, duration: float = None):
+    def start(self, useOriginScan: bool = False, debug: bool = False, testing: bool = False, noLidar: bool = False, noPSOAngle: bool = False, duration: float = None):
         """ 
         Start the PSTracker to continuously track the particle swarm.
         """
@@ -240,16 +240,17 @@ class PSTracker:
                         with mutex:
                             xLocation.value = results["x"]
                             yLocation.value = results["y"]
-                            angle.value = results["angle"]
+                            if not noPSOAngle:  # Double negative but it works and is clearer to the user.
+                                angle.value = results["angle"]
                             psoUpdate.value = 1  # 1 means True (update needed)
 
                             # Debugging output
                             if debug:
                                 print(
                                     f"\n--- PSO Results ---\n"
-                                    f"X: {xLocation.value:.2f}\n"
-                                    f"Y: {yLocation.value:.2f}\n"
-                                    f"Angle: {angle.value:.2f}\n"
+                                    f"X: {results['x']:.2f}\n"
+                                    f"Y: {results['y']:.2f}\n"
+                                    f"Angle: {results['angle']:.2f}\n"
                                     f"Iterations: {results['iterCount']}\n"
                                     f"Cost: {results['cost']:.4f}\n"
                                     f"True Total Time: {results['trueTotalTime']:.4f} s\n"
@@ -349,7 +350,7 @@ class PSTracker:
 
 
 
-def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10, 
+def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = False, swarmSize: int = 10, 
          w: float = 0.2, c1: float = 0.3, c2: float = 1.5, sections: int = 16, targetTime: float = 1/15,
          noLidar: bool = False, motorPWM: int = 660):
     try:
@@ -363,7 +364,7 @@ def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10,
             print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
             return
         tracker = PSTracker(swarmSize=swarmSize, w=w, c1=c1, c2=c2, sections=sections, targetTime=targetTime, motorPWM=motorPWM)
-        tracker.start(useOriginScan=useOriginScan, debug=debug, noLidar=noLidar)
+        tracker.start(useOriginScan=useOriginScan, debug=debug, noLidar=noLidar, noPSOAngle=noPSOAngle)
     finally:
         tracker.close()
         logging.info("PSTracker has been closed successfully.")
@@ -380,10 +381,12 @@ if __name__ == "__main__":
     parser.add_argument('--debug', action='store_true', help='Enable debug output')
     parser.add_argument('--originScan', action='store_true', help='Use origin scan as prior scan')
     parser.add_argument('--noLidar', action='store_true', help='Do not use lidar for tracking (for testing purposes)')
+    parser.add_argument('--noPSOAngle', action='store_true', help='Do not update angle from PSO results.')
     args = parser.parse_args()
     main(
         debug=args.debug,
         useOriginScan=args.originScan,
+        noPSOAngle=args.noPSOAngle,
         swarmSize=args.swarmSize,
         w=args.w,
         c1=args.c1,
