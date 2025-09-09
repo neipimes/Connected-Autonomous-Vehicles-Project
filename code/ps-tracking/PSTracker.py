@@ -19,10 +19,12 @@ class PSTracker:
                  sections: int = 16,
                  xNoise: float = 0.1,
                  yNoise: float = 0.1,
-                 angleNoise: float = 0.1,
+                 angleNoise: float = 0.005,
                  targetTime: float = 1/15, 
                  motorPWM: int = 660, 
-                 qualityCutoff: int = 0):
+                 qualityCutoff: int = 0,
+                 psoXYWeight: float = 0.5,
+                 psoAngleWeight: float = 0.5):
         """
         Initialize the PSTracker to grab IMU readings and run the PSO algorithm to track the particle swarm.
         :param swarmSize: Number of particles in the swarm.
@@ -57,6 +59,8 @@ class PSTracker:
         self.xNoise = xNoise
         self.yNoise = yNoise
         self.angleNoise = angleNoise
+        self.psoXYWeight = psoXYWeight
+        self.psoAngleWeight = psoAngleWeight
 
         # Initialize IMU and Lidar
         imus.start()
@@ -97,10 +101,14 @@ class PSTracker:
         # Initialize local state from shared values
         xDisplacement = 0.0
         yDisplacement = 0.0
+        preXDisplacement = None
+        preYDisplacement = None
         angleValue = 0.0
         xVelocity = 0.0
         yVelocity = 0.0
-        timestep = 0.1  # Default timestep in seconds
+        timestep = None  # Default timestep in seconds
+        psoLastUpdate = None
+        psoTimestep = None
 
         startTime = time.time()
         currentRunningTime = 0.0
@@ -114,16 +122,33 @@ class PSTracker:
                     if debug:
                         print("PSO update detected, reinitializing local state.")
                         sys.stdout.flush()
-                    xDisplacement = copy.deepcopy(xLocation.value)
-                    yDisplacement = copy.deepcopy(yLocation.value)
-                    angleValue = copy.deepcopy(angle.value)
+
+                    if psoLastUpdate is None: # First PSO results, can't update velocities yet.
+                        psoLastUpdate = time.time()
+                    else:
+                        psoTimestep = time.time() - psoLastUpdate
+
+                        preXDisplacement = copy.deepcopy(xDisplacement)
+                        preYDisplacement = copy.deepcopy(yDisplacement)
+                        xDisplacement = copy.deepcopy(xLocation.value)
+                        yDisplacement = copy.deepcopy(yLocation.value)
+                        angleValue = copy.deepcopy(angle.value)
+
+                        # Recalculate velocities based on change in displacement if previous values exist
+                        if preXDisplacement is not None and preYDisplacement is not None and psoTimestep is not None and psoTimestep > 0:
+                            xVelocity = (xDisplacement - preXDisplacement) / psoTimestep
+                            yVelocity = (yDisplacement - preYDisplacement) / psoTimestep
+                        else:
+                            xVelocity = 0.0
+                            yVelocity = 0.0
+
                     psoUpdate.value = 0  # 0 means False (no update needed)
                 else:
                     xLocation.value = copy.deepcopy(xDisplacement)
                     yLocation.value = copy.deepcopy(yDisplacement)
                     angle.value = copy.deepcopy(angleValue)
 
-                    if debug:
+                    if debug and xLocation.value is not None and yLocation.value is not None and angle.value is not None and xVelocity is not None and yVelocity is not None and timestep is not None:
                         print(
                             f"IMU Results: "
                             f"X={xLocation.value:.2f}, "
@@ -202,8 +227,11 @@ class PSTracker:
         try:
             # Create shared variables for IMU and PSO readings.
             xLocation = mp.Value('d', 0.0)  # double precision float
+            xLocation.value = 0.0
             yLocation = mp.Value('d', 0.0)
+            yLocation.value = 0.0
             angle = mp.Value('d', 0.0)
+            angle.value = 0.0
             psoUpdate = mp.Value('i', 0)  # Integer for PSO update flag (1=True, 0=False)
             mutex = mp.Lock()  # Mutex for thread-safe access to IMU readings
             resultsQueue = Queue(maxsize=1)  # Queue for results from PSO runs
@@ -308,12 +336,12 @@ class PSTracker:
                         f"-------------------\n"
                     ) if debug else None
 
-                    # Update x, y and angle based on the best particle's position
+                    # Update x, y and angle based on the best particle's position, weighted by a passed value.
                     with mutex:
-                        xLocation.value = results["x"]
-                        yLocation.value = results["y"]
+                        xLocation.value = results["x"] * self.psoXYWeight + (1 - self.psoXYWeight) * xLocation.value
+                        yLocation.value = results["y"] * self.psoXYWeight + (1 - self.psoXYWeight) * yLocation.value
                         if not noPSOAngle: # Double negative but is clearer in arguments to user.
-                            angle.value = results["angle"]
+                            angle.value = results["angle"] * self.psoAngleWeight + (1 - self.psoAngleWeight) * angle.value
                         psoUpdate.value = 1
 
                         if testing:
@@ -450,7 +478,7 @@ class PSTracker:
 
 def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = False, swarmSize: int = 10, 
          w: float = 0.2, c1: float = 0.3, c2: float = 1.5, sections: int = 16, targetTime: float = 1/15,
-         noLidar: bool = False, motorPWM: int = 660):
+         noLidar: bool = False, motorPWM: int = 660, psoXYWeight: float = 0.5, psoAngleWeight: float = 0.5):
     try:
         calibrateChoice = input("Calibrate IMUs? (y/N): ").strip().lower()
         if calibrateChoice == 'y':
@@ -461,7 +489,8 @@ def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = Fa
         else:
             print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
             return
-        tracker = PSTracker(swarmSize=swarmSize, w=w, c1=c1, c2=c2, sections=sections, targetTime=targetTime, motorPWM=motorPWM)
+        tracker = PSTracker(swarmSize=swarmSize, w=w, c1=c1, c2=c2, sections=sections, targetTime=targetTime, motorPWM=motorPWM,
+                            psoXYWeight=psoXYWeight, psoAngleWeight=psoAngleWeight)
         tracker.start(useOriginScan=useOriginScan, debug=debug, noLidar=noLidar, noPSOAngle=noPSOAngle)
     finally:
         tracker.close()
@@ -480,6 +509,8 @@ if __name__ == "__main__":
     parser.add_argument('--originScan', action='store_true', help='Use origin scan as prior scan')
     parser.add_argument('--noLidar', action='store_true', help='Do not use lidar for tracking (for testing purposes)')
     parser.add_argument('--noPSOAngle', action='store_true', help='Do not update angle from PSO results.')
+    parser.add_argument('--psoXYWeight', type=float, default=0.5, help='Weighting for PSO X and Y adjustments (0.0-1.0)')
+    parser.add_argument('--psoAngleWeight', type=float, default=0.5, help='Weighting for PSO angle adjustments (0.0-1.0)')
     args = parser.parse_args()
     main(
         debug=args.debug,
@@ -491,5 +522,7 @@ if __name__ == "__main__":
         c2=args.c2,
         sections=args.sections,
         targetTime=args.targetTime,
-        motorPWM=args.motorPWM
+        motorPWM=args.motorPWM,
+        psoXYWeight=args.psoXYWeight,
+        psoAngleWeight=args.psoAngleWeight
     )
