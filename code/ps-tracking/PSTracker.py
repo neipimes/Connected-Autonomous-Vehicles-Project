@@ -110,6 +110,8 @@ class PSTracker:
         psoLastUpdate = None
         psoTimestep = None
 
+        fbAccelGyroValues = []
+
         startTime = time.time()
         currentRunningTime = 0.0
 
@@ -125,14 +127,17 @@ class PSTracker:
 
                     if psoLastUpdate is None: # First PSO results, can't update velocities yet.
                         psoLastUpdate = time.time()
+                        priorXVelocity = xVelocity
+                        priorYVelocity = yVelocity
                     else:
                         psoTimestep = time.time() - psoLastUpdate
+                        psoLastUpdate = time.time()
 
-                        preXDisplacement = copy.deepcopy(xDisplacement)
-                        preYDisplacement = copy.deepcopy(yDisplacement)
-                        xDisplacement = copy.deepcopy(xLocation.value)
-                        yDisplacement = copy.deepcopy(yLocation.value)
-                        angleValue = copy.deepcopy(angle.value)
+                        preXDisplacement = xDisplacement
+                        preYDisplacement = yDisplacement
+                        xDisplacement = xLocation.value
+                        yDisplacement = yLocation.value
+                        angleValue = angle.value
 
                         # Recalculate velocities based on change in displacement if previous values exist
                         if preXDisplacement is not None and preYDisplacement is not None and psoTimestep is not None and psoTimestep > 0:
@@ -142,11 +147,44 @@ class PSTracker:
                             xVelocity = 0.0
                             yVelocity = 0.0
 
+                        # Convert to numpy arrays for vectorized operations
+                        if fbAccelGyroValues:
+                            fbArray = np.array([(fb, angle, dt) for fb, angle, dt in fbAccelGyroValues if dt is not None and dt > 0])
+                            
+                            if len(fbArray) > 0:
+                                fbVals = fbArray[:, 0]
+                                angleData = fbArray[:, 1] 
+                                timesteps = fbArray[:, 2]
+                                
+                                # Vectorized angle calculations
+                                cumulative_angles = np.cumsum(angleData * timesteps)
+                                angles_rad = np.radians(angleValue + cumulative_angles)
+                                
+                                # Vectorized position deltas
+                                xDeltas = fbVals * np.sin(angles_rad)
+                                yDeltas = fbVals * np.cos(angles_rad)
+                                
+                                # Vectorized displacement calculations using kinematic equations
+                                timesteps_sq = timesteps**2
+                                
+                                # Calculate cumulative displacements
+                                for i, (xDelta, yDelta, dt) in enumerate(zip(xDeltas, yDeltas, timesteps)):
+                                    xDisplacement = xDisplacement + xVelocity * dt + 0.5 * xDelta * dt**2
+                                    yDisplacement = yDisplacement + yVelocity * dt + 0.5 * yDelta * dt**2
+                                    xVelocity = xVelocity + xDelta * dt  # mm/s
+                                    yVelocity = yVelocity + yDelta * dt
+                                
+                                # Update final angle
+                                angleValue = angleValue + np.sum(angleData * timesteps)
+                                angleValue = np.mod(angleValue, 360)
+
+                        fbAccelGyroValues = []  # Clear the list after recalculations are done.
+
                     psoUpdate.value = 0  # 0 means False (no update needed)
                 else:
-                    xLocation.value = copy.deepcopy(xDisplacement)
-                    yLocation.value = copy.deepcopy(yDisplacement)
-                    angle.value = copy.deepcopy(angleValue)
+                    xLocation.value = xDisplacement
+                    yLocation.value = yDisplacement
+                    angle.value = angleValue
 
                     if debug and xLocation.value is not None and yLocation.value is not None and angle.value is not None and xVelocity is not None and yVelocity is not None and timestep is not None:
                         print(
@@ -163,7 +201,7 @@ class PSTracker:
 
             data = imus.getAvgData() # Blocking call to get IMU data
             
-            priorRunningTime = copy.copy(currentRunningTime)
+            priorRunningTime = currentRunningTime
             currentRunningTime = time.time() - startTime
             timestep = currentRunningTime - priorRunningTime
 
@@ -175,14 +213,19 @@ class PSTracker:
             fbData *= 1000  # Convert m/s^2 to mm/s^2
             lrData *= 1000  # Convert m/s^2 to mm/s^2
 
+            fbAccelGyroValues.append((fbData, data[2], timestep)) # Append a tuple of (acceleration, angle change, timestep) to the list for future recalculations.
+
             # Adjust angle by the angle change and normalize angle to (0, 360)
             angleValue = angleValue + data[2] * timestep  # degrees
             angleValue = np.mod(angleValue, 360)
 
             # Use FB measurement and angle to get approximate location change. 
             # TODO: LR measurement could also be used for a complementary filter for angle measurement.
-            xDelta = fbData * np.sin(np.radians(angleValue))
-            yDelta = fbData * np.cos(np.radians(angleValue))
+            angle_rad = np.radians(angleValue)
+            sin_angle = np.sin(angle_rad)
+            cos_angle = np.cos(angle_rad)
+            xDelta = fbData * sin_angle
+            yDelta = fbData * cos_angle
 
             # Do calculations for accelerometer and gyroscope data
             xDisplacement = xDisplacement + xVelocity * timestep + 0.5 * xDelta * timestep**2
