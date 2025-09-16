@@ -15,7 +15,7 @@ logging.basicConfig(filename=os.path.expanduser("~/logs/pstracker.log"), level=l
 class PSTracker:
     def __init__(self, 
                  swarmSize: int, 
-                 w: float, c1: float, c2: float, 
+                 w_xy: float, c1_xy: float, c2_xy: float, w_angle: float, c1_angle: float, c2_angle: float,
                  sections: int = 16,
                  xNoise: float = 0.1,
                  yNoise: float = 0.1,
@@ -28,9 +28,8 @@ class PSTracker:
         """
         Initialize the PSTracker to grab IMU readings and run the PSO algorithm to track the particle swarm.
         :param swarmSize: Number of particles in the swarm.
-        :param w: Inertia weight for PSO.
-        :param c1: Cognitive coefficient for PSO.
-        :param c2: Social coefficient for PSO.
+        :param w_xy, c1_xy, c2_xy: PSO parameters for XY position.
+        :param w_angle, c1_angle, c2_angle: PSO parameters for angle.
         :param sections: Number of sections for lidar scan comparison.
         :param targetTime: Target time for the tracking loop.
         :param motorPWM: Motor PWM value for the LiDAR.
@@ -50,9 +49,12 @@ class PSTracker:
 
         self.globalStop = False  # Flag to stop the tracking loop
         self.swarmSize = swarmSize
-        self.w = w
-        self.c1 = c1
-        self.c2 = c2
+        self.w_xy = w_xy
+        self.c1_xy = c1_xy
+        self.c2_xy = c2_xy
+        self.w_angle = w_angle
+        self.c1_angle = c1_angle
+        self.c2_angle = c2_angle
         self.sections = sections
         self.targetTime = targetTime
         self.qualityCutoff = qualityCutoff
@@ -76,7 +78,7 @@ class PSTracker:
         #self.lidar.reset()  # Clear any initial data from the LiDAR.
         
         self._logger.info("LiDAR and IMUs initialised successfully.")
-        self._logger.info(f"PSTracker initialized with swarmSize={swarmSize}, w={w}, c1={c1}, c2={c2}, sections={sections}, targetTime={targetTime}.")
+        self._logger.info(f"PSTracker initialized with swarmSize={swarmSize}, w_xy={w_xy}, c1_xy={c1_xy}, c2_xy={c2_xy}, w_angle={w_angle}, c1_angle={c1_angle}, c2_angle={c2_angle}, sections={sections}, targetTime={targetTime}.")
 
     @staticmethod
     def runIMUReadings(xLocation, yLocation, angle, psoUpdate, mutex, debug=True):
@@ -349,9 +351,12 @@ class PSTracker:
                     self._logger.info("Starting PSO estimation with initial IMU readings.")
                     pso = PSO(
                         swarmSize=self.swarmSize,
-                        w=self.w,
-                        c1=self.c1,
-                        c2=self.c2,
+                        w_xy=self.w_xy,
+                        c1_xy=self.c1_xy,
+                        c2_xy=self.c2_xy,
+                        w_angle=self.w_angle,
+                        c1_angle=self.c1_angle,
+                        c2_angle=self.c2_angle,
                         oldLidarScan=priorScan,
                         newLidarScan=lidarScan,
                         sections=self.sections,
@@ -486,9 +491,12 @@ class PSTracker:
         # Create a new PSO instance with the provided IMU readings
         pso = PSO(
             swarmSize=self.swarmSize,
-            w=self.w,
-            c1=self.c1,
-            c2=self.c2,
+            w_xy=self.w_xy,
+            c1_xy=self.c1_xy,
+            c2_xy=self.c2_xy,
+            w_angle=self.w_angle,
+            c1_angle=self.c1_angle,
+            c2_angle=self.c2_angle,
             oldLidarScan=priorScan,
             newLidarScan=lidarScan,
             sections=self.sections,
@@ -520,7 +528,8 @@ class PSTracker:
 
 
 def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = False, swarmSize: int = 10, 
-         w: float = 0.2, c1: float = 0.3, c2: float = 1.5, sections: int = 16, targetTime: float = 1/15,
+         w_xy: float = 0.2, c1_xy: float = 0.3, c2_xy: float = 1.5, w_angle: float = 0.2, c1_angle: float = 0.3, c2_angle: float = 1.5,
+         sections: int = 16, targetTime: float = 1/15,
          noLidar: bool = False, motorPWM: int = 660, psoXYWeight: float = 0.5, psoAngleWeight: float = 0.5):
     try:
         calibrateChoice = input("Calibrate IMUs? (y/N): ").strip().lower()
@@ -532,8 +541,9 @@ def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = Fa
         else:
             print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
             return
-        tracker = PSTracker(swarmSize=swarmSize, w=w, c1=c1, c2=c2, sections=sections, targetTime=targetTime, motorPWM=motorPWM,
-                            psoXYWeight=psoXYWeight, psoAngleWeight=psoAngleWeight)
+        tracker = PSTracker(swarmSize=swarmSize, w_xy=w_xy, c1_xy=c1_xy, c2_xy=c2_xy, w_angle=w_angle, c1_angle=c1_angle, c2_angle=c2_angle,
+                sections=sections, targetTime=targetTime, motorPWM=motorPWM,
+                psoXYWeight=psoXYWeight, psoAngleWeight=psoAngleWeight)
         tracker.start(useOriginScan=useOriginScan, debug=debug, noLidar=noLidar, noPSOAngle=noPSOAngle)
     finally:
         tracker.close()
@@ -542,9 +552,12 @@ def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = Fa
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PSTracker Command Line Options")
     parser.add_argument('--swarmSize', type=int, default=10, help='Number of particles in the swarm (default: 10)')
-    parser.add_argument('--w', type=float, default=0.3, help='Inertia weight for PSO')
-    parser.add_argument('--c1', type=float, default=0.8, help='Cognitive coefficient for PSO')
-    parser.add_argument('--c2', type=float, default=2.5, help='Social coefficient for PSO')
+    parser.add_argument('--w-xy', type=float, default=0.3, help='Inertia weight for PSO (XY position).')
+    parser.add_argument('--c1-xy', type=float, default=0.8, help='Cognitive coefficient for PSO (XY position).')
+    parser.add_argument('--c2-xy', type=float, default=2.5, help='Social coefficient for PSO (XY position).')
+    parser.add_argument('--w-angle', type=float, default=0.1, help='Inertia weight for PSO (angle).')
+    parser.add_argument('--c1-angle', type=float, default=0.2, help='Cognitive coefficient for PSO (angle).')
+    parser.add_argument('--c2-angle', type=float, default=1.5, help='Social coefficient for PSO (angle).')
     parser.add_argument('--sections', type=int, default=16, help='Number of sections for lidar scan comparison')
     parser.add_argument('--targetTime', type=float, default=1/15, help='Target time for the tracking loop')
     parser.add_argument('--motorPWM', type=int, default=660, help='Motor PWM value to set speed (0-1023)')
@@ -560,9 +573,12 @@ if __name__ == "__main__":
         useOriginScan=args.originScan,
         noPSOAngle=args.noPSOAngle,
         swarmSize=args.swarmSize,
-        w=args.w,
-        c1=args.c1,
-        c2=args.c2,
+        w_xy=args.w_xy,
+        c1_xy=args.c1_xy,
+        c2_xy=args.c2_xy,
+        w_angle=args.w_angle,
+        c1_angle=args.c1_angle,
+        c2_angle=args.c2_angle,
         sections=args.sections,
         targetTime=args.targetTime,
         motorPWM=args.motorPWM,

@@ -4,7 +4,7 @@ import copy, time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 class PSO:
-    def __init__(self, swarmSize: int, w: float, c1: float, c2: float, 
+    def __init__(self, swarmSize: int, w_xy: float, c1_xy: float, c2_xy: float, w_angle: float, c1_angle: float, c2_angle: float,
                  oldLidarScan: np.ndarray, newLidarScan: np.ndarray, sections: int = 16, imuXReading: float = 0.0,
                  imuYReading: float = 0.0, imuAngleReading: float = 0.0, xNoise: float = 0.1, yNoise: float = 0.1, 
                  angleNoise: float = 0.005, targetTime: float = 0.1):
@@ -13,9 +13,12 @@ class PSO:
         
         # Initialize parameters
         self.swarmSize = swarmSize
-        self.w = w
-        self.c1 = c1
-        self.c2 = c2
+        self.w_xy = w_xy
+        self.c1_xy = c1_xy
+        self.c2_xy = c2_xy
+        self.w_angle = w_angle
+        self.c1_angle = c1_angle
+        self.c2_angle = c2_angle
 
         self.oldLidarScan = oldLidarScan
         self.newLidarScan = newLidarScan
@@ -55,7 +58,11 @@ class PSO:
 
     def _update_particle(self, particle):
         """Helper function to update a single particle's velocity, position, and cost."""
-        particle.updateVelocity(self.best_particle, self.w, self.c1, self.c2)
+        particle.updateVelocity(
+            self.best_particle,
+            self.w_xy, self.c1_xy, self.c2_xy,
+            self.w_angle, self.c1_angle, self.c2_angle
+        )
         particle.updatePosition()
         cost = particle.calcCost(self.oldLidarScan, self.newLidarScan, self.sections)
         return particle, cost

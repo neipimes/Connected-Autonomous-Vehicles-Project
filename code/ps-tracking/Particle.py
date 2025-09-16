@@ -160,7 +160,7 @@ class Particle:
         self.y = copy.deepcopy(y)
         self.angle = copy.deepcopy(angle)
 
-    def updateVelocity(self, best_particle, w, c1, c2):
+    def updateVelocity(self, best_particle, w_xy, c1_xy, c2_xy, w_angle, c1_angle, c2_angle):
         """
         Update the particle's velocity based on its own best position and the global best position.
         This method should implement the PSO velocity update formula.
@@ -173,10 +173,10 @@ class Particle:
         r1_y, r2_y = np.random.rand(), np.random.rand()
         r1_angle, r2_angle = np.random.rand(), np.random.rand()
 
-        # Update velocity components using PSO formula (independent randomness)
-        self.xVelocity = w * self.xVelocity + c1 * r1_x * (best_particle.x - self.x) + c2 * r2_x * (best_particle.x - self.x)
-        self.yVelocity = w * self.yVelocity + c1 * r1_y * (best_particle.y - self.y) + c2 * r2_y * (best_particle.y - self.y)
-        self.angleVelocity = w * self.angleVelocity + c1 * r1_angle * (best_particle.angle - self.angle) + c2 * r2_angle * (best_particle.angle - self.angle)
+        # Update velocity components using separate PSO parameters for XY and angle
+        self.xVelocity = w_xy * self.xVelocity + c1_xy * r1_x * (best_particle.x - self.x) + c2_xy * r2_x * (best_particle.x - self.x)
+        self.yVelocity = w_xy * self.yVelocity + c1_xy * r1_y * (best_particle.y - self.y) + c2_xy * r2_y * (best_particle.y - self.y)
+        self.angleVelocity = w_angle * self.angleVelocity + c1_angle * r1_angle * (best_particle.angle - self.angle) + c2_angle * r2_angle * (best_particle.angle - self.angle)
 
     def updatePosition(self):
        """
