@@ -8,9 +8,11 @@ class Particle:
         self.angle = angle
         self.cost = float('inf')  # Initialize cost to infinity
 
-        self.xVelocity = np.random.uniform(-0.1, 0.1)
-        self.yVelocity = np.random.uniform(-0.1, 0.1)
+        self.xVelocity = np.random.uniform(-1, 1)
+        self.yVelocity = np.random.uniform(-1, 1)
         self.angleVelocity = np.random.uniform(-0.1, 0.1)
+
+        self.personalBest = (x, y, angle)
 
     '''def calcEstLidarMeasurements(self, oldLidarScan: np.ndarray):
         """
@@ -148,9 +150,12 @@ class Particle:
         # Calculate total cost and normalize by the number of segments
         totalCost = np.sum(segmentCosts) / sections if sections > 0 else np.sum(segmentCosts)
 
-        # Set and return the cost
-        self.cost = totalCost
-        return self.cost
+        # Update personal best if current cost is lower
+        if totalCost < self.cost:
+            self.cost = totalCost
+            self.personalBest = (self.x, self.y, self.angle)
+
+        return totalCost
 
     def updatePose(self, x, y, angle): # TODO: Might not be needed.
         """
@@ -174,9 +179,9 @@ class Particle:
         r1_angle, r2_angle = np.random.rand(), np.random.rand()
 
         # Update velocity components using separate PSO parameters for XY and angle
-        self.xVelocity = w_xy * self.xVelocity + c1_xy * r1_x * (best_particle.x - self.x) + c2_xy * r2_x * (best_particle.x - self.x)
-        self.yVelocity = w_xy * self.yVelocity + c1_xy * r1_y * (best_particle.y - self.y) + c2_xy * r2_y * (best_particle.y - self.y)
-        self.angleVelocity = w_angle * self.angleVelocity + c1_angle * r1_angle * (best_particle.angle - self.angle) + c2_angle * r2_angle * (best_particle.angle - self.angle)
+        self.xVelocity = w_xy * self.xVelocity + c1_xy * r1_x * (self.personalBest[0] - self.x) + c2_xy * r2_x * (best_particle.x - self.x)
+        self.yVelocity = w_xy * self.yVelocity + c1_xy * r1_y * (self.personalBest[1] - self.y) + c2_xy * r2_y * (best_particle.y - self.y)
+        self.angleVelocity = w_angle * self.angleVelocity + c1_angle * r1_angle * (self.personalBest[2] - self.angle) + c2_angle * r2_angle * (best_particle.angle - self.angle)
 
     def updatePosition(self):
        """
@@ -187,8 +192,6 @@ class Particle:
        self.angle += self.angleVelocity
        # Normalize angle to [0, 360)
        self.angle = np.mod(self.angle, 360)
-
-    
 
     '''def transform_lidar_to_particle_frame_batch(self, lidar_scans: np.ndarray, particles: np.ndarray):
         """
