@@ -64,23 +64,12 @@ class Particle:
         return transformedScan'''
     
     # Below are copilot generated functions that transform lidar scans to the particle frame using an explicit cartesian approach.
-    def calcEstLidarMeasurements(self, lidar_scan: np.ndarray):
+    def calcEstLidarMeasurements(self, angles: np.ndarray, distances: np.ndarray):
         """
         Explicitly transform lidar scan points from the robot frame to the particle frame.
         lidar_scan: Nx3 array [quality, angle (deg), distance]
         Returns: Nx3 array [quality, angle (deg, in particle frame), distance (in particle frame)]
         """
-        if not isinstance(lidar_scan, np.ndarray) or lidar_scan.ndim != 2 or lidar_scan.shape[1] != 3:
-            raise ValueError("lidar_scan must be a Nx3 numpy array.")
-
-        # Filter out low quality
-        qualities = lidar_scan[:, 0]
-        angles = lidar_scan[:, 1]
-        distances = lidar_scan[:, 2]
-        valid_mask = qualities >= 5
-        qualities = qualities[valid_mask]
-        angles = angles[valid_mask]
-        distances = distances[valid_mask]
 
         # Convert polar to Cartesian in robot frame
         x_robot = distances * np.sin(np.radians(angles)) # Sine and cosine are swapped here to match the polar lidar coordinate system.
@@ -102,7 +91,7 @@ class Particle:
         angles_part = np.degrees(np.arctan2(y_part, x_part))
         angles_part = np.mod(angles_part, 360)
 
-        return np.column_stack((qualities, angles_part, distances_part))
+        return np.column_stack((angles_part, distances_part))
 
     def sector_mean_bincount(self, distances, bin_idx, sections: int):
         # Function used to calculate mean distances in each sector using numpy bincount. Written by yanqing.liu@curtin.edu.au
@@ -112,7 +101,7 @@ class Particle:
             mean_dist = np.where(count == 0, 0, sum_dist / count) # Calculate mean, set to 0 where count is 0
         return mean_dist
 
-    def calcCost(self, oldLidarScan: np.ndarray, newLidarScan: np.ndarray, sections: int = 16):
+    def calcCost(self, newLidarScan: np.ndarray, angles: np.ndarray, distances: np.ndarray, sections: int = 16):
         """
         Calculate the cost of the particle given the lidar measurements.
         This method should compare the expected lidar measurements with the actual ones.
@@ -141,16 +130,16 @@ class Particle:
         if sections <= 0:
             raise ValueError("Sections must be a positive integer.")
 
-        expectedScan = self.calcEstLidarMeasurements(oldLidarScan)
+        expectedScan = self.calcEstLidarMeasurements(angles, distances)
         
         # Optimized: Use numpy digitize to bin angles into sections for efficiency
         bin_edges = np.linspace(0, 360, sections + 1)
-        expected_bins = np.digitize(expectedScan[:, 1], bin_edges) - 1
-        new_bins = np.digitize(newLidarScan[:, 1], bin_edges) - 1
+        expected_bins = np.digitize(expectedScan[:, 0], bin_edges) - 1
+        new_bins = np.digitize(newLidarScan[:, 0], bin_edges) - 1
 
         # Calculate mean distances for each bin using bincount courtesy of yanqing.liu@curtin.edu.au
-        expected_means = self.sector_mean_bincount(expectedScan[:, 2], expected_bins, sections)
-        new_means = self.sector_mean_bincount(newLidarScan[:, 2], new_bins, sections)
+        expected_means = self.sector_mean_bincount(expectedScan[:, 1], expected_bins, sections)
+        new_means = self.sector_mean_bincount(newLidarScan[:, 1], new_bins, sections)
 
         # Compute segment costs using absolute differences
         segmentCosts = np.abs(expected_means - new_means)

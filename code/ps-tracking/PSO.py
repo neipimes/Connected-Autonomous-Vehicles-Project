@@ -20,10 +20,20 @@ class PSO:
         self.c1_angle = c1_angle
         self.c2_angle = c2_angle
 
-        self.oldLidarScan = oldLidarScan
-        self.newLidarScan = newLidarScan
         self.sections = sections
-        
+
+        # Filter the lidar scans to remove low quality points
+        filteredOldTuple = self._filter_scan(oldLidarScan)
+        self.qualitiesOld = filteredOldTuple[0]
+        self.anglesOld = filteredOldTuple[1]
+        self.distancesOld = filteredOldTuple[2]
+
+        filteredNewTuple = self._filter_scan(newLidarScan)
+        self.qualitiesNew = filteredNewTuple[0]
+        self.anglesNew = filteredNewTuple[1]
+        self.distancesNew = filteredNewTuple[2]
+        self.newLidarScan = np.column_stack((self.qualitiesNew, self.anglesNew, self.distancesNew))
+
         self.particles = []
         self.best_particle = None
 
@@ -53,7 +63,7 @@ class PSO:
         y = np.random.normal(imuYReading, abs(imuYReading) * abs(yNoise) / 2)
         angle = np.random.normal(imuAngleReading, abs(imuAngleReading) * abs(angleNoise) / 2)
         particle = Particle(x, y, angle)
-        cost = particle.calcCost(self.oldLidarScan, self.newLidarScan, self.sections)
+        cost = particle.calcCost(self.newLidarScan, self.anglesOld, self.distancesOld, self.sections)
         return particle, cost
 
     def _update_particle(self, particle):
@@ -64,8 +74,24 @@ class PSO:
             self.w_angle, self.c1_angle, self.c2_angle
         )
         particle.updatePosition()
-        cost = particle.calcCost(self.oldLidarScan, self.newLidarScan, self.sections)
+        cost = particle.calcCost(self.newLidarScan, self.anglesOld, self.distancesOld, self.sections)
         return particle, cost
+
+    def _filter_scan(self, scan: np.ndarray):
+
+        if not isinstance(scan, np.ndarray) or scan.ndim != 2 or scan.shape[1] != 3:
+            raise ValueError("Lidar scan must be a Nx3 numpy array.")
+
+        # Filter out low quality points from the lidar scan
+        qualities = scan[:, 0]
+        angles = scan[:, 1]
+        distances = scan[:, 2]
+        valid_mask = qualities >= 5
+        qualities = qualities[valid_mask]
+        angles = angles[valid_mask]
+        distances = distances[valid_mask]
+
+        return (qualities, angles, distances)
 
     def run(self, analytics: bool = False):
         startTime = time.time()
