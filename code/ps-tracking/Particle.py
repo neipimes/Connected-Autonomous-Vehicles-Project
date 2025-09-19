@@ -104,6 +104,14 @@ class Particle:
 
         return np.column_stack((qualities, angles_part, distances_part))
 
+    def sector_mean_bincount(self, distances, bin_idx, sections: int):
+        # Function used to calculate mean distances in each sector using numpy bincount. Written by yanqing.liu@curtin.edu.au
+        sum_dist = np.bincount(bin_idx, weights=distances, minlength=sections) # Get the sum of distances in each bin
+        count = np.bincount(bin_idx, minlength=sections) # Get the count of distances in each bin
+        with np.errstate(invalid='ignore'):
+            mean_dist = np.where(count == 0, 0, sum_dist / count) # Calculate mean, set to 0 where count is 0
+        return mean_dist
+
     def calcCost(self, oldLidarScan: np.ndarray, newLidarScan: np.ndarray, sections: int = 16):
         """
         Calculate the cost of the particle given the lidar measurements.
@@ -140,9 +148,9 @@ class Particle:
         expected_bins = np.digitize(expectedScan[:, 1], bin_edges) - 1
         new_bins = np.digitize(newLidarScan[:, 1], bin_edges) - 1
 
-        # Calculate mean distances for each bin
-        expected_means = np.array([expectedScan[expected_bins == i, 2].mean() if np.any(expected_bins == i) else 0 for i in range(sections)])
-        new_means = np.array([newLidarScan[new_bins == i, 2].mean() if np.any(new_bins == i) else 0 for i in range(sections)])
+        # Calculate mean distances for each bin using bincount courtesy of yanqing.liu@curtin.edu.au
+        expected_means = self.sector_mean_bincount(expectedScan[:, 2], expected_bins, sections)
+        new_means = self.sector_mean_bincount(newLidarScan[:, 2], new_bins, sections)
 
         # Compute segment costs using absolute differences
         segmentCosts = np.abs(expected_means - new_means)
