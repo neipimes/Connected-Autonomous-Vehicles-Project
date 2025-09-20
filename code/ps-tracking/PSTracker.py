@@ -482,39 +482,6 @@ class PSTracker:
 
         return (xLocation.value, yLocation.value, angle.value, avgIterations / runCount if testing and runCount > 0 else 0, avgCost / runCount if testing and runCount > 0 else 0)
 
-    def doPSOEstimation(self, imuX, imuY, imuAngle, lidarScan, priorScan, resultsQueue: Queue):
-        '''
-        TODO NOTICE: TO BE DEPRECATED
-        Performs a PSO estimation run from provided readings and PSTracker attributes.
-        Runs as a thread in the start() function, and returns new estimates for the position and angle.
-        '''
-        # Create a new PSO instance with the provided IMU readings
-        pso = PSO(
-            swarmSize=self.swarmSize,
-            w_xy=self.w_xy,
-            c1_xy=self.c1_xy,
-            c2_xy=self.c2_xy,
-            w_angle=self.w_angle,
-            c1_angle=self.c1_angle,
-            c2_angle=self.c2_angle,
-            oldLidarScan=priorScan,
-            newLidarScan=lidarScan,
-            sections=self.sections,
-            xNoise=self.xNoise,
-            yNoise=self.yNoise,
-            angleNoise=self.angleNoise,
-            imuXReading=imuX,
-            imuYReading=imuY,
-            imuAngleReading=imuAngle,
-            targetTime=self.targetTime
-        )
-
-        # Run the PSO algorithm
-        results = pso.run()
-
-        # Add results to queue
-        resultsQueue.put(results)
-
     def close(self):
         """
         Close the PSTracker and stop the IMU readings.
@@ -525,14 +492,12 @@ class PSTracker:
         self.lidar.disconnect()
         self._logger.info("PSTracker closed and resources released.")
 
-
-
-def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = False, swarmSize: int = 10, 
+def main(self, debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = False, swarmSize: int = 10, 
          w_xy: float = 0.2, c1_xy: float = 0.3, c2_xy: float = 1.5, w_angle: float = 0.2, c1_angle: float = 0.3, c2_angle: float = 1.5,
          sections: int = 16, targetTime: float = 1/15,
          noLidar: bool = False, motorPWM: int = 660, psoXYWeight: float = 0.5, psoAngleWeight: float = 0.5):
     try:
-        calibrateChoice = input("Calibrate IMUs? (y/N): ").strip().lower()
+        calibrateChoice = input("Calibrate individual IMUs? (y/N): ").strip().lower()
         if calibrateChoice == 'y':
             imus.calibrateAll(50)
             logging.info("IMUs calibrated successfully.")
@@ -541,6 +506,17 @@ def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = Fa
         else:
             print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
             return
+
+        calibrateChoice = input("Calibrate High Pass Filter and general Gyroscope bias? (y/N): ").strip().lower()
+        if calibrateChoice == 'y':
+            #TODO: HPF and Gyro bias calibration functions here.
+            logging.info("HPF and Gyro bias calibrated successfully.")
+        elif calibrateChoice == 'n' or calibrateChoice == '':
+            logging.info("Skipping HPF and Gyro bias calibration.")
+        else:
+            print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
+            return
+        
         tracker = PSTracker(swarmSize=swarmSize, w_xy=w_xy, c1_xy=c1_xy, c2_xy=c2_xy, w_angle=w_angle, c1_angle=c1_angle, c2_angle=c2_angle,
                 sections=sections, targetTime=targetTime, motorPWM=motorPWM,
                 psoXYWeight=psoXYWeight, psoAngleWeight=psoAngleWeight)
