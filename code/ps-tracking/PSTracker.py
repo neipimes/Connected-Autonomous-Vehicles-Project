@@ -509,7 +509,7 @@ def main(self, debug: bool = False, useOriginScan: bool = False, noPSOAngle: boo
 
         calibrateChoice = input("Calibrate High Pass Filter and general Gyroscope bias? (y/N): ").strip().lower()
         if calibrateChoice == 'y':
-            #TODO: HPF and Gyro bias calibration functions here.
+            imus.calibrateHPFAndBiases(15)
             logging.info("HPF and Gyro bias calibrated successfully.")
         elif calibrateChoice == 'n' or calibrateChoice == '':
             logging.info("Skipping HPF and Gyro bias calibration.")
