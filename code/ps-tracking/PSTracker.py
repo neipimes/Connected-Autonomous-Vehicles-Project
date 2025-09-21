@@ -1,4 +1,10 @@
+#import importlib
 from imucontrol.imus import CAV_imus as imus
+#from imucontrol.imus import CAV_imus as C_imus
+#import imucontrol.imus as C_imus
+#print(C_imus.__file__)
+#importlib.reload(C_imus)
+
 from PSO import PSO
 
 import numpy as np
@@ -13,7 +19,7 @@ from queue import Queue
 logging.basicConfig(filename=os.path.expanduser("~/logs/pstracker.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class PSTracker:
-    def __init__(self, 
+    def __init__(self,
                  swarmSize: int, 
                  w_xy: float, c1_xy: float, c2_xy: float, w_angle: float, c1_angle: float, c2_angle: float,
                  sections: int = 16,
@@ -417,50 +423,6 @@ class PSTracker:
                             lidar_process.join()
                         break
 
-                # Old commented-out code for reference
-                # if resultsQueue.qsize() == 1:
-                #     resultReceived = time.time()
-                #     results = resultsQueue.get()
-                #     self._logger.info(f"Received PSO result: {results}")
-
-                #     with mutex:
-                #         xLocation.value = results["x"]
-                #         yLocation.value = results["y"]
-                #         angle.value = results["angle"]
-                #         psoUpdate.value = 1
-
-                #         if testing:
-                #             runCount += 1
-                #             avgIterations += results['iterCount']
-                #             avgCost += results['cost']
-
-                #     if duration and time.time() - start_time >= duration:
-                #         self._logger.info(f"Duration reached. Terminating PSTracker loop after {time.time() - start_time:.2f} seconds.")
-                #         break
-
-                #     with mutex:
-                #         imuXReading = copy.deepcopy(xLocation.value)
-                #         imuYReading = copy.deepcopy(yLocation.value)
-                #         imuAngleReading = copy.deepcopy(angle.value)
-
-                #     if useOriginScan:
-                #         priorScan = copy.deepcopy(originScan)
-
-                #     psoThread = mt.Thread(target=self.doPSOEstimation, args=(imuXReading, imuYReading, imuAngleReading, lidarScan, priorScan, resultsQueue))
-                #     psoThread.start()
-
-                #     priorScan = copy.deepcopy(lidarScan)
-
-                #     runCounter += 1
-                #     resultTiming = time.time() - resultReceived
-
-                #     if self.globalStop:
-                #         self._logger.info("Global stop signal received. Terminating PSTracker loop.")
-                #         imu_process.terminate()
-                #         imu_process.join()
-                #         psoThread.join() if psoThread else None
-                #         break
-
             if self.globalStop:
                         self._logger.info("Global stop signal received. Terminating PSTracker loop.")
                         imu_process.terminate()
@@ -492,7 +454,7 @@ class PSTracker:
         self.lidar.disconnect()
         self._logger.info("PSTracker closed and resources released.")
 
-def main(self, debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = False, swarmSize: int = 10, 
+def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = False, swarmSize: int = 10, 
          w_xy: float = 0.2, c1_xy: float = 0.3, c2_xy: float = 1.5, w_angle: float = 0.2, c1_angle: float = 0.3, c2_angle: float = 1.5,
          sections: int = 16, targetTime: float = 1/15,
          noLidar: bool = False, motorPWM: int = 660, psoXYWeight: float = 0.5, psoAngleWeight: float = 0.5):
@@ -509,7 +471,8 @@ def main(self, debug: bool = False, useOriginScan: bool = False, noPSOAngle: boo
 
         calibrateChoice = input("Calibrate High Pass Filter and general Gyroscope bias? (y/N): ").strip().lower()
         if calibrateChoice == 'y':
-            imus.calibrateHPFAndBiases(15)
+            imus.calibrateHPFBias(15)
+            #imus.printSmthButNoSelf()
             logging.info("HPF and Gyro bias calibrated successfully.")
         elif calibrateChoice == 'n' or calibrateChoice == '':
             logging.info("Skipping HPF and Gyro bias calibration.")
