@@ -201,50 +201,55 @@ class CAV_imus:
         Filter should exclude the middle 97% of stationary values to determine the noise floor.
         An average check of this duration will also be done to determine a more general adjustment to the prior bias values.
         '''
-
-        # Gather values from all IMUs using getAvgData() over the duration
-        startTime = time.time()
-        runningTime = time.time() - startTime
-        timestep = 0
-
-        fbValues = []
-        lrValues = []
-        taValues = []
-
-        while runningTime < duration:
-            data = self.getAvgData() # 0 = FB, 1 = LR, 2 = Turn Angle
-
-            priorRunningTime = copy.copy(runningTime)
+        try:
+            # Gather values from all IMUs using getAvgData() over the duration
+            startTime = time.time()
             runningTime = time.time() - startTime
-            timestep = runningTime - priorRunningTime
+            timestep = 0
 
-            fbValues.append(data[0])
-            lrValues.append(data[1])
-            taValues.append(data[2], timestep)
+            fbValues = []
+            lrValues = []
+            taValues = []
 
-        # Process TA data to get estimated angle
-        totalAngle = 0
-        for value, timestep in taValues:
-            # Integrate the turn angle rate to get the estimated angle
-            totalAngle += value * timestep
-        self.taBias = totalAngle / duration # Update the turn angle bias
+            while runningTime < duration:
+                data = self.getAvgData() # 0 = FB, 1 = LR, 2 = Turn Angle
 
-        # Process FB and LR data to determine HPF values
-        fbValuesArray = np.array(fbValues)
-        lrValuesArray = np.array(lrValues)
+                priorRunningTime = copy.copy(runningTime)
+                runningTime = time.time() - startTime
+                timestep = runningTime - priorRunningTime
 
-        # Calculate the 1.5% and 98.5% percentiles to exclude the middle 97% of values
-        fbFiltered = np.percentile(fbValuesArray, [1.5, 98.5])
-        lrFiltered = np.percentile(lrValuesArray, [1.5, 98.5])
+                fbValues.append(data[0])
+                lrValues.append(data[1])
+                taValues.append(data[2], timestep)
 
-        # Calculate the HPF cutoffs are the 1.5th percentile and 98.5th percentile values for lower and upper bounds respectively
-        self.fbHPF = [fbFiltered[0], fbFiltered[1]]
-        self.lrHPF = [lrFiltered[0], lrFiltered[1]]
+            # Process TA data to get estimated angle
+            totalAngle = 0
+            for value, timestep in taValues:
+                # Integrate the turn angle rate to get the estimated angle
+                totalAngle += value * timestep
+            self.taBias = totalAngle / duration # Update the turn angle bias
 
-        # Calculate rough FB and LR biases as the average of the middle 97% of gathered values
-        self.fbBias = np.mean(fbValuesArray[(fbValuesArray >= fbFiltered[0]) & (fbValuesArray <= fbFiltered[1])])
-        self.lrBias = np.mean(lrValuesArray[(lrValuesArray >= lrFiltered[0]) & (lrValuesArray <= lrFiltered[1])])
+            # Process FB and LR data to determine HPF values
+            fbValuesArray = np.array(fbValues)
+            lrValuesArray = np.array(lrValues)
 
+            # Calculate the 1.5% and 98.5% percentiles to exclude the middle 97% of values
+            fbFiltered = np.percentile(fbValuesArray, [1.5, 98.5])
+            lrFiltered = np.percentile(lrValuesArray, [1.5, 98.5])
+
+            # Calculate the HPF cutoffs are the 1.5th percentile and 98.5th percentile values for lower and upper bounds respectively
+            self.fbHPF = [fbFiltered[0], fbFiltered[1]]
+            self.lrHPF = [lrFiltered[0], lrFiltered[1]]
+
+            # Calculate rough FB and LR biases as the average of the middle 97% of gathered values
+            self.fbBias = np.mean(fbValuesArray[(fbValuesArray >= fbFiltered[0]) & (fbValuesArray <= fbFiltered[1])])
+            self.lrBias = np.mean(lrValuesArray[(lrValuesArray >= lrFiltered[0]) & (lrValuesArray <= lrFiltered[1])])
+
+            # After calibration, save the new HPF and bias values to imu.conf
+            self.saveConfig()
+
+        except Exception as e:
+            self._logger.error(f"Error during HPF and bias calibration: {e}")
 
     def saveConfig(self):
         # Save IMU configuration, biases, noise values, and aliases to ~/configs/imu.conf
