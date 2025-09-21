@@ -8,9 +8,11 @@ class Particle:
         self.angle = angle
         self.cost = float('inf')  # Initialize cost to infinity
 
-        self.xVelocity = np.random.uniform(-0.1, 0.1)
-        self.yVelocity = np.random.uniform(-0.1, 0.1)
+        self.xVelocity = np.random.uniform(-1, 1)
+        self.yVelocity = np.random.uniform(-1, 1)
         self.angleVelocity = np.random.uniform(-0.1, 0.1)
+
+        self.personalBest = (x, y, angle)
 
     '''def calcEstLidarMeasurements(self, oldLidarScan: np.ndarray):
         """
@@ -62,23 +64,12 @@ class Particle:
         return transformedScan'''
     
     # Below are copilot generated functions that transform lidar scans to the particle frame using an explicit cartesian approach.
-    def calcEstLidarMeasurements(self, lidar_scan: np.ndarray):
+    def calcEstLidarMeasurements(self, angles: np.ndarray, distances: np.ndarray):
         """
         Explicitly transform lidar scan points from the robot frame to the particle frame.
         lidar_scan: Nx3 array [quality, angle (deg), distance]
         Returns: Nx3 array [quality, angle (deg, in particle frame), distance (in particle frame)]
         """
-        if not isinstance(lidar_scan, np.ndarray) or lidar_scan.ndim != 2 or lidar_scan.shape[1] != 3:
-            raise ValueError("lidar_scan must be a Nx3 numpy array.")
-
-        # Filter out low quality
-        qualities = lidar_scan[:, 0]
-        angles = lidar_scan[:, 1]
-        distances = lidar_scan[:, 2]
-        valid_mask = qualities >= 5
-        qualities = qualities[valid_mask]
-        angles = angles[valid_mask]
-        distances = distances[valid_mask]
 
         # Convert polar to Cartesian in robot frame
         x_robot = distances * np.sin(np.radians(angles)) # Sine and cosine are swapped here to match the polar lidar coordinate system.
@@ -100,13 +91,38 @@ class Particle:
         angles_part = np.degrees(np.arctan2(y_part, x_part))
         angles_part = np.mod(angles_part, 360)
 
-        return np.column_stack((qualities, angles_part, distances_part))
+        return np.column_stack((angles_part, distances_part))
 
-    def calcCost(self, oldLidarScan: np.ndarray, newLidarScan: np.ndarray, sections: int = 16):
+    def sector_mean_bincount(self, distances, bin_idx, sections: int):
+        # Function used to calculate mean distances in each sector using numpy bincount. Written by yanqing.liu@curtin.edu.au
+        sum_dist = np.bincount(bin_idx, weights=distances, minlength=sections) # Get the sum of distances in each bin
+        count = np.bincount(bin_idx, minlength=sections) # Get the count of distances in each bin
+        with np.errstate(invalid='ignore'):
+            mean_dist = np.where(count == 0, 0, sum_dist / count) # Calculate mean, set to 0 where count is 0
+        return mean_dist
+
+    def calcCost(self, newLidarScan: np.ndarray, angles: np.ndarray, distances: np.ndarray, sections: int = 16):
         """
         Calculate the cost of the particle given the lidar measurements.
         This method should compare the expected lidar measurements with the actual ones.
         """
+
+        # Old implementation (commented out for reference)
+        # expectedScan = self.calcEstLidarMeasurements(oldLidarScan)
+        # bin_edges = np.linspace(0, 360, sections + 1)
+        # expected_bins = np.digitize(expectedScan[:, 1], bin_edges) - 1
+        # new_bins = np.digitize(newLidarScan[:, 1], bin_edges) - 1
+        # segmentCosts = np.zeros(sections)
+        # for i in range(sections):
+        #     expectedSegment = expectedScan[expected_bins == i]
+        #     newSegment = newLidarScan[new_bins == i]
+        #     if expectedSegment.size == 0 or newSegment.size == 0:
+        #         continue
+        #     distances = np.abs(expectedSegment[:, 2].mean() - newSegment[:, 2].mean())
+        #     segmentCosts[i] = distances
+        # totalCost = np.sum(segmentCosts)
+        # if sections > 0:
+        #     totalCost /= sections
 
         if not isinstance(newLidarScan, np.ndarray) or newLidarScan.ndim != 2 or newLidarScan.shape[1] != 3:
             raise ValueError("newLidarScan must be a Nx3 numpy array.")
@@ -114,31 +130,29 @@ class Particle:
         if sections <= 0:
             raise ValueError("Sections must be a positive integer.")
 
-        expectedScan = self.calcEstLidarMeasurements(oldLidarScan)
+        expectedScan = self.calcEstLidarMeasurements(angles, distances)
         
         # Optimized: Use numpy digitize to bin angles into sections for efficiency
         bin_edges = np.linspace(0, 360, sections + 1)
-        expected_bins = np.digitize(expectedScan[:, 1], bin_edges) - 1
-        new_bins = np.digitize(newLidarScan[:, 1], bin_edges) - 1
+        expected_bins = np.digitize(expectedScan[:, 0], bin_edges) - 1
+        new_bins = np.digitize(newLidarScan[:, 0], bin_edges) - 1
 
-        segmentCosts = np.zeros(sections)
-        for i in range(sections):
-            expectedSegment = expectedScan[expected_bins == i]
-            newSegment = newLidarScan[new_bins == i]
-            if expectedSegment.size == 0 or newSegment.size == 0: # No data in this segment
-                continue
-            # For efficiency, compare mean distances in each segment
-            distances = np.abs(expectedSegment[:, 2].mean() - newSegment[:, 2].mean())
-            segmentCosts[i] = distances
+        # Calculate mean distances for each bin using bincount courtesy of yanqing.liu@curtin.edu.au
+        expected_means = self.sector_mean_bincount(expectedScan[:, 1], expected_bins, sections)
+        new_means = self.sector_mean_bincount(newLidarScan[:, 1], new_bins, sections)
 
-        totalCost = np.sum(segmentCosts)
-        # Normalize the cost by the number of segments
-        if sections > 0:
-            totalCost /= sections
+        # Compute segment costs using absolute differences
+        segmentCosts = np.abs(expected_means - new_means)
 
-        # Set and return the cost
-        self.cost = totalCost
-        return self.cost
+        # Calculate total cost and normalize by the number of segments
+        totalCost = np.sum(segmentCosts) / sections if sections > 0 else np.sum(segmentCosts)
+
+        # Update personal best if current cost is lower
+        if totalCost < self.cost:
+            self.cost = totalCost
+            self.personalBest = (self.x, self.y, self.angle)
+
+        return totalCost
 
     def updatePose(self, x, y, angle): # TODO: Might not be needed.
         """
@@ -148,7 +162,7 @@ class Particle:
         self.y = copy.deepcopy(y)
         self.angle = copy.deepcopy(angle)
 
-    def updateVelocity(self, best_particle, w, c1, c2):
+    def updateVelocity(self, best_particle, w_xy, c1_xy, c2_xy, w_angle, c1_angle, c2_angle):
         """
         Update the particle's velocity based on its own best position and the global best position.
         This method should implement the PSO velocity update formula.
@@ -161,10 +175,10 @@ class Particle:
         r1_y, r2_y = np.random.rand(), np.random.rand()
         r1_angle, r2_angle = np.random.rand(), np.random.rand()
 
-        # Update velocity components using PSO formula (independent randomness)
-        self.xVelocity = w * self.xVelocity + c1 * r1_x * (best_particle.x - self.x) + c2 * r2_x * (best_particle.x - self.x)
-        self.yVelocity = w * self.yVelocity + c1 * r1_y * (best_particle.y - self.y) + c2 * r2_y * (best_particle.y - self.y)
-        self.angleVelocity = w * self.angleVelocity + c1 * r1_angle * (best_particle.angle - self.angle) + c2 * r2_angle * (best_particle.angle - self.angle)
+        # Update velocity components using separate PSO parameters for XY and angle
+        self.xVelocity = w_xy * self.xVelocity + c1_xy * r1_x * (self.personalBest[0] - self.x) + c2_xy * r2_x * (best_particle.x - self.x)
+        self.yVelocity = w_xy * self.yVelocity + c1_xy * r1_y * (self.personalBest[1] - self.y) + c2_xy * r2_y * (best_particle.y - self.y)
+        self.angleVelocity = w_angle * self.angleVelocity + c1_angle * r1_angle * (self.personalBest[2] - self.angle) + c2_angle * r2_angle * (best_particle.angle - self.angle)
 
     def updatePosition(self):
        """
@@ -175,8 +189,6 @@ class Particle:
        self.angle += self.angleVelocity
        # Normalize angle to [0, 360)
        self.angle = np.mod(self.angle, 360)
-
-    
 
     '''def transform_lidar_to_particle_frame_batch(self, lidar_scans: np.ndarray, particles: np.ndarray):
         """

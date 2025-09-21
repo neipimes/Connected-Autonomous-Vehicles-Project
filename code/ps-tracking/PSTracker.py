@@ -4,22 +4,36 @@ from PSO import PSO
 import numpy as np
 from rplidar import RPLidar
 import multiprocessing as mp
+import threading as mt
 import time, copy, logging, os, sys
 import argparse
+from queue import Queue
 
 # Start logging using the logging directory in home directory.
 logging.basicConfig(filename=os.path.expanduser("~/logs/pstracker.log"), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class PSTracker:
-    def __init__(self, swarmSize: int, w: float, c1: float, c2: float, sections: int = 16, targetTime: float = 1/15, motorPWM: int = 660):
+    def __init__(self, 
+                 swarmSize: int, 
+                 w_xy: float, c1_xy: float, c2_xy: float, w_angle: float, c1_angle: float, c2_angle: float,
+                 sections: int = 16,
+                 xNoise: float = 0.1,
+                 yNoise: float = 0.1,
+                 angleNoise: float = 0.005,
+                 targetTime: float = 1/15, 
+                 motorPWM: int = 660, 
+                 qualityCutoff: int = 0,
+                 psoXYWeight: float = 0.5,
+                 psoAngleWeight: float = 0.5):
         """
         Initialize the PSTracker to grab IMU readings and run the PSO algorithm to track the particle swarm.
         :param swarmSize: Number of particles in the swarm.
-        :param w: Inertia weight for PSO.
-        :param c1: Cognitive coefficient for PSO.
-        :param c2: Social coefficient for PSO.
+        :param w_xy, c1_xy, c2_xy: PSO parameters for XY position.
+        :param w_angle, c1_angle, c2_angle: PSO parameters for angle.
         :param sections: Number of sections for lidar scan comparison.
         :param targetTime: Target time for the tracking loop.
+        :param motorPWM: Motor PWM value for the LiDAR.
+        :param qualityCutoff: Quality cutoff for LiDAR readings.
         """
 
         self._logger = logging.getLogger("PSTrackerLogger")
@@ -35,25 +49,36 @@ class PSTracker:
 
         self.globalStop = False  # Flag to stop the tracking loop
         self.swarmSize = swarmSize
-        self.w = w
-        self.c1 = c1
-        self.c2 = c2
+        self.w_xy = w_xy
+        self.c1_xy = c1_xy
+        self.c2_xy = c2_xy
+        self.w_angle = w_angle
+        self.c1_angle = c1_angle
+        self.c2_angle = c2_angle
         self.sections = sections
         self.targetTime = targetTime
-        
+        self.qualityCutoff = qualityCutoff
+        self.xNoise = xNoise
+        self.yNoise = yNoise
+        self.angleNoise = angleNoise
+        self.psoXYWeight = psoXYWeight
+        self.psoAngleWeight = psoAngleWeight
+
         # Initialize IMU and Lidar
         imus.start()
         self.lidar = RPLidar('/dev/ttyUSB0', baudrate=256000) #TODO: Add adjustability for lidar port. Config file?
         if self.lidar is None:
             self._logger.error("Failed to connect to LiDAR. Please check the connection.")
             raise ConnectionError("LiDAR connection failed.")
-        # Lidar starts on initialization, so we don't need to call start() here.
+        # Lidar starts on initialization, so we don't need to call start() here. OR MAYBE WE DO???
+        #self.lidar.start(scan_type='express')
         self.lidar.motor_speed = motorPWM # Set motor speed in PWM value (0-1023)
+        #self.lidar.start_motor()
         time.sleep(5) # Allow some time for the LiDAR to start up and stabilize.
         #self.lidar.reset()  # Clear any initial data from the LiDAR.
         
         self._logger.info("LiDAR and IMUs initialised successfully.")
-        self._logger.info(f"PSTracker initialized with swarmSize={swarmSize}, w={w}, c1={c1}, c2={c2}, sections={sections}, targetTime={targetTime}.")
+        self._logger.info(f"PSTracker initialized with swarmSize={swarmSize}, w_xy={w_xy}, c1_xy={c1_xy}, c2_xy={c2_xy}, w_angle={w_angle}, c1_angle={c1_angle}, c2_angle={c2_angle}, sections={sections}, targetTime={targetTime}.")
 
     @staticmethod
     def runIMUReadings(xLocation, yLocation, angle, psoUpdate, mutex, debug=True):
@@ -78,10 +103,16 @@ class PSTracker:
         # Initialize local state from shared values
         xDisplacement = 0.0
         yDisplacement = 0.0
+        preXDisplacement = None
+        preYDisplacement = None
         angleValue = 0.0
         xVelocity = 0.0
         yVelocity = 0.0
-        timestep = 0.1  # Default timestep in seconds
+        timestep = None  # Default timestep in seconds
+        psoLastUpdate = None
+        psoTimestep = None
+
+        fbAccelGyroValues = []
 
         startTime = time.time()
         currentRunningTime = 0.0
@@ -95,16 +126,69 @@ class PSTracker:
                     if debug:
                         print("PSO update detected, reinitializing local state.")
                         sys.stdout.flush()
-                    xDisplacement = copy.deepcopy(xLocation.value)
-                    yDisplacement = copy.deepcopy(yLocation.value)
-                    angleValue = copy.deepcopy(angle.value)
+
+                    if psoLastUpdate is None: # First PSO results, can't update velocities yet.
+                        psoLastUpdate = time.time()
+                        priorXVelocity = xVelocity
+                        priorYVelocity = yVelocity
+                    else:
+                        psoTimestep = time.time() - psoLastUpdate
+                        psoLastUpdate = time.time()
+
+                        preXDisplacement = xDisplacement
+                        preYDisplacement = yDisplacement
+                        xDisplacement = xLocation.value
+                        yDisplacement = yLocation.value
+                        angleValue = angle.value
+
+                        # Recalculate velocities based on change in displacement if previous values exist
+                        if preXDisplacement is not None and preYDisplacement is not None and psoTimestep is not None and psoTimestep > 0:
+                            xVelocity = (xDisplacement - preXDisplacement) / psoTimestep
+                            yVelocity = (yDisplacement - preYDisplacement) / psoTimestep
+                        else:
+                            xVelocity = 0.0
+                            yVelocity = 0.0
+
+                        # Convert to numpy arrays for vectorized operations
+                        if fbAccelGyroValues:
+                            fbArray = np.array([(fb, angle, dt) for fb, angle, dt in fbAccelGyroValues if dt is not None and dt > 0])
+                            
+                            if len(fbArray) > 0:
+                                fbVals = fbArray[:, 0]
+                                angleData = fbArray[:, 1] 
+                                timesteps = fbArray[:, 2]
+                                
+                                # Vectorized angle calculations
+                                cumulative_angles = np.cumsum(angleData * timesteps)
+                                angles_rad = np.radians(angleValue + cumulative_angles)
+                                
+                                # Vectorized position deltas
+                                xDeltas = fbVals * np.sin(angles_rad)
+                                yDeltas = fbVals * np.cos(angles_rad)
+                                
+                                # Vectorized displacement calculations using kinematic equations
+                                timesteps_sq = timesteps**2
+                                
+                                # Calculate cumulative displacements
+                                for i, (xDelta, yDelta, dt) in enumerate(zip(xDeltas, yDeltas, timesteps)):
+                                    xDisplacement = xDisplacement + xVelocity * dt + 0.5 * xDelta * dt**2
+                                    yDisplacement = yDisplacement + yVelocity * dt + 0.5 * yDelta * dt**2
+                                    xVelocity = xVelocity + xDelta * dt  # mm/s
+                                    yVelocity = yVelocity + yDelta * dt
+                                
+                                # Update final angle
+                                angleValue = angleValue + np.sum(angleData * timesteps)
+                                angleValue = np.mod(angleValue, 360)
+
+                        fbAccelGyroValues = []  # Clear the list after recalculations are done.
+
                     psoUpdate.value = 0  # 0 means False (no update needed)
                 else:
-                    xLocation.value = copy.deepcopy(xDisplacement)
-                    yLocation.value = copy.deepcopy(yDisplacement)
-                    angle.value = copy.deepcopy(angleValue)
+                    xLocation.value = xDisplacement
+                    yLocation.value = yDisplacement
+                    angle.value = angleValue
 
-                    if debug:
+                    if debug and xLocation.value is not None and yLocation.value is not None and angle.value is not None and xVelocity is not None and yVelocity is not None and timestep is not None:
                         print(
                             f"IMU Results: "
                             f"X={xLocation.value:.2f}, "
@@ -119,7 +203,7 @@ class PSTracker:
 
             data = imus.getAvgData() # Blocking call to get IMU data
             
-            priorRunningTime = copy.copy(currentRunningTime)
+            priorRunningTime = currentRunningTime
             currentRunningTime = time.time() - startTime
             timestep = currentRunningTime - priorRunningTime
 
@@ -131,14 +215,19 @@ class PSTracker:
             fbData *= 1000  # Convert m/s^2 to mm/s^2
             lrData *= 1000  # Convert m/s^2 to mm/s^2
 
+            fbAccelGyroValues.append((fbData, data[2], timestep)) # Append a tuple of (acceleration, angle change, timestep) to the list for future recalculations.
+
             # Adjust angle by the angle change and normalize angle to (0, 360)
             angleValue = angleValue + data[2] * timestep  # degrees
             angleValue = np.mod(angleValue, 360)
 
             # Use FB measurement and angle to get approximate location change. 
             # TODO: LR measurement could also be used for a complementary filter for angle measurement.
-            xDelta = fbData * np.sin(np.radians(angleValue))
-            yDelta = fbData * np.cos(np.radians(angleValue))
+            angle_rad = np.radians(angleValue)
+            sin_angle = np.sin(angle_rad)
+            cos_angle = np.cos(angle_rad)
+            xDelta = fbData * sin_angle
+            yDelta = fbData * cos_angle
 
             # Do calculations for accelerometer and gyroscope data
             xDisplacement = xDisplacement + xVelocity * timestep + 0.5 * xDelta * timestep**2
@@ -147,103 +236,251 @@ class PSTracker:
             yVelocity = yVelocity + yDelta * timestep                
             
 
-    def start(self, useOriginScan: bool = False, debug: bool = False, noLidar: bool = False):
+    def runLidarHandler(self, lidar, latestScan, scanUpdatedFlag, mutex, debug=False):
+        """
+        Continuously read LiDAR scans and store only the latest scan.
+        This method runs in a separate thread or process to avoid blocking the main thread.
+        """
+        try:
+            scan_iterator = lidar.iter_scans(max_buf_meas=3000, scan_type='normal')
+
+            # Drop the first 10 scans to ensure stable data
+            for _ in range(10):
+                next(scan_iterator)
+                print("Dropped scan")
+                sys.stdout.flush()
+
+            for scan in scan_iterator:
+                lidarScan = [(quality, angle, distance) for quality, angle, distance in scan]
+                with mutex:
+                    latestScan[:] = lidarScan  # Update the shared variable with the latest scan
+                    scanUpdatedFlag.value = 1  # Signal that a new scan has been set
+                if debug:
+                    print("Latest LiDAR scan updated.")
+                    sys.stdout.flush()
+        except Exception as e:
+            print(f"Error in LiDAR handler: {e}")
+            self._logger.error(f"Error in LiDAR handler: {e}")
+            sys.stdout.flush()
+
+    def start(self, useOriginScan: bool = False, debug: bool = False, testing: bool = False, noLidar: bool = False, noPSOAngle: bool = False, duration: float = None):
         """ 
         Start the PSTracker to continuously track the particle swarm.
         """
         self._logger.info("Starting PSTracker loop...")
 
-        # Clear lidar input to ensure no stale data
-        #self.lidar.reset()
-
         try:
             # Create shared variables for IMU and PSO readings.
             xLocation = mp.Value('d', 0.0)  # double precision float
+            xLocation.value = 0.0
             yLocation = mp.Value('d', 0.0)
+            yLocation.value = 0.0
             angle = mp.Value('d', 0.0)
+            angle.value = 0.0
             psoUpdate = mp.Value('i', 0)  # Integer for PSO update flag (1=True, 0=False)
             mutex = mp.Lock()  # Mutex for thread-safe access to IMU readings
+            resultsQueue = Queue(maxsize=1)  # Queue for results from PSO runs
+            latestScan = mp.Manager().list()  # Shared list for the latest LiDAR scan
+            scanUpdatedFlag = mp.Value('i', 0)  # Flag to indicate if a new scan has been set
+            lidarMutex = mp.Lock()  # Mutex for thread-safe access to LiDAR scans
 
+            imuProcessStartTime = time.time()
             # Start IMU readings in a separate process
             imu_process = mp.Process(target=PSTracker.runIMUReadings, args=(xLocation, yLocation, angle, psoUpdate, mutex, debug))
             imu_process.start()
             self._logger.info("IMU readings process started.")
+            print(f"IMU readings process started in {time.time() - imuProcessStartTime:.4f} s") if debug else None
 
+            # Start LiDAR handler in a separate process
+            lidarStartTime = time.time()
+            if not noLidar:
+                lidar_process = mp.Process(target=self.runLidarHandler, args=(self.lidar, latestScan, scanUpdatedFlag, lidarMutex, debug))
+                lidar_process.start()
+                self._logger.info("LiDAR handler process started.")
+            print(f"LiDAR handler started in {time.time() - lidarStartTime:.4f} s") if debug else None
+
+            cycleEndTime = None
             originScan = None
             priorScan = None
-            # Continuously read lidar scans and run PSO
-            if noLidar == False:
-                for scan in self.lidar.iter_scans():
-                    # Convert scan to numpy array
-                    lidar_scan = np.array(scan)
+            firstScanTime = None
+            secondScanTime = None
+            resultTiming = 0
+            start_time = time.time() if duration else None
 
-                    # Check if this is the first scan
-                    if priorScan is None:
-                        # Store the first scan as the initial scan and continue to next iteration
-                        priorScan = lidar_scan
-                        originScan = lidar_scan
-                        continue
+            # Clear lidar input to ensure no stale data
+            #self.lidar.reset()
 
-                    # Grab most up-to-date IMU readings using a mutex to ensure thread safety.
+            runCounter = 0
+            avgIterations = 0
+            avgCost = 0
+
+            while not self.globalStop:
+                # Wait for a new scan to be set
+                if not noLidar:
+                    while scanUpdatedFlag.value == 0:
+                        time.sleep(0.005)  # Small delay to avoid busy waiting
+
+                    with lidarMutex:
+                        lidarScan = np.array(latestScan)  # Convert shared list to a 2D numpy array
+                        scanUpdatedFlag.value = 0  # Reset the flag after consuming the scan
+
+                if runCounter == 0:
+                    print("First scan...") if debug else None
+                    self._logger.info("First scan received, storing as initial scan.")
+                    firstScanTime = time.time()
+                    priorScan = copy.deepcopy(lidarScan) if not noLidar else None
+                    originScan = copy.deepcopy(lidarScan) if not noLidar else None
+                    runCounter += 1
+                    continue
+                else:
+                    '''self._logger.info("Second scan received, storing as prior scan.")
+                    secondScanTime = time.time()
+                    if firstScanTime is not None:
+                        firstScanDuration = secondScanTime - firstScanTime
+                        print(f"Time taken for first scan: {firstScanDuration:.4f} s") if debug else None
+                    '''
+                        
+                    if useOriginScan and not noLidar:
+                        priorScan = copy.deepcopy(originScan)
+
                     with mutex:
                         imuXReading = copy.deepcopy(xLocation.value)
                         imuYReading = copy.deepcopy(yLocation.value)
                         imuAngleReading = copy.deepcopy(angle.value)
 
-                    # Create a PSO instance with the current lidar scan and IMU readings
-                    if useOriginScan:
-                        # Use the original scan as the prior scan
-                        priorScan = originScan
-
+                    self._logger.info("Starting PSO estimation with initial IMU readings.")
                     pso = PSO(
                         swarmSize=self.swarmSize,
-                        w=self.w,
-                        c1=self.c1,
-                        c2=self.c2,
+                        w_xy=self.w_xy,
+                        c1_xy=self.c1_xy,
+                        c2_xy=self.c2_xy,
+                        w_angle=self.w_angle,
+                        c1_angle=self.c1_angle,
+                        c2_angle=self.c2_angle,
                         oldLidarScan=priorScan,
-                        newLidarScan=lidar_scan,
+                        newLidarScan=lidarScan,
                         sections=self.sections,
+                        xNoise=self.xNoise,
+                        yNoise=self.yNoise,
+                        angleNoise=self.angleNoise,
                         imuXReading=imuXReading,
                         imuYReading=imuYReading,
                         imuAngleReading=imuAngleReading,
                         targetTime=self.targetTime
                     )
-
-                    # Run the PSO algorithm
                     results = pso.run()
-                    priorScan = lidar_scan
+                    self._logger.info(f"PSO estimation completed: {results}")
 
-                    # Update x, y and angle based on the best particle's position
+                    # Print PSO results
+                    print(
+                        f"\n--- PSO Results ---\n"
+                        f"X: {results['x']:.2f}\n"
+                        f"Y: {results['y']:.2f}\n"
+                        f"Angle: {results['angle']:.2f}\n"
+                        f"Iterations: {results['iterCount']}\n"
+                        f"Cost: {results['cost']:.4f}\n"
+                        f"True Total Time: {results['trueTotalTime']:.4f} s\n"
+                        f"Init Time: {results['initTime']:.4f} s\n"
+                        f"-------------------\n"
+                    ) if debug else None
+
+                    # Update x, y and angle based on the best particle's position, weighted by a passed value.
                     with mutex:
-                        xLocation.value = results["x"]
-                        yLocation.value = results["y"]
-                        angle.value = results["angle"]
-                        psoUpdate.value = 1  # 1 means True (update needed)
-                        
-                        # Debugging output
-                        if debug:
-                            print(
-                                f"PSO Results: "
-                                f"X={xLocation.value:.2f}, "
-                                f"Y={yLocation.value:.2f}, "
-                                f"Angle={angle.value:.2f}, "
-                                f"Iterations={results['iterCount']}, "
-                                f"Cost={results['cost']:.2f}"
-                            )
+                        xLocation.value = results["x"] * self.psoXYWeight + (1 - self.psoXYWeight) * xLocation.value
+                        yLocation.value = results["y"] * self.psoXYWeight + (1 - self.psoXYWeight) * yLocation.value
+                        if not noPSOAngle: # Double negative but is clearer in arguments to user.
+                            angle.value = results["angle"] * self.psoAngleWeight + (1 - self.psoAngleWeight) * angle.value
+                        psoUpdate.value = 1
+
+                        if testing:
+                            runCount += 1
+                            avgIterations += results['iterCount']
+                            avgCost += results['cost']
+
+                    if duration and time.time() - start_time >= duration:
+                        self._logger.info(f"Duration reached. Terminating PSTracker loop after {time.time() - start_time:.2f} seconds.")
+                        break
+
+                    if useOriginScan and not noLidar:
+                        priorScan = copy.deepcopy(originScan)
+
+                    priorScan = copy.deepcopy(lidarScan) if not noLidar else None
+
+                    runCounter += 1
 
                     if self.globalStop:
                         self._logger.info("Global stop signal received. Terminating PSTracker loop.")
                         imu_process.terminate()
                         imu_process.join()
+                        if not noLidar:
+                            lidar_process.terminate()
+                            lidar_process.join()
                         break
 
+                # Old commented-out code for reference
+                # if resultsQueue.qsize() == 1:
+                #     resultReceived = time.time()
+                #     results = resultsQueue.get()
+                #     self._logger.info(f"Received PSO result: {results}")
+
+                #     with mutex:
+                #         xLocation.value = results["x"]
+                #         yLocation.value = results["y"]
+                #         angle.value = results["angle"]
+                #         psoUpdate.value = 1
+
+                #         if testing:
+                #             runCount += 1
+                #             avgIterations += results['iterCount']
+                #             avgCost += results['cost']
+
+                #     if duration and time.time() - start_time >= duration:
+                #         self._logger.info(f"Duration reached. Terminating PSTracker loop after {time.time() - start_time:.2f} seconds.")
+                #         break
+
+                #     with mutex:
+                #         imuXReading = copy.deepcopy(xLocation.value)
+                #         imuYReading = copy.deepcopy(yLocation.value)
+                #         imuAngleReading = copy.deepcopy(angle.value)
+
+                #     if useOriginScan:
+                #         priorScan = copy.deepcopy(originScan)
+
+                #     psoThread = mt.Thread(target=self.doPSOEstimation, args=(imuXReading, imuYReading, imuAngleReading, lidarScan, priorScan, resultsQueue))
+                #     psoThread.start()
+
+                #     priorScan = copy.deepcopy(lidarScan)
+
+                #     runCounter += 1
+                #     resultTiming = time.time() - resultReceived
+
+                #     if self.globalStop:
+                #         self._logger.info("Global stop signal received. Terminating PSTracker loop.")
+                #         imu_process.terminate()
+                #         imu_process.join()
+                #         psoThread.join() if psoThread else None
+                #         break
+
+            if self.globalStop:
+                        self._logger.info("Global stop signal received. Terminating PSTracker loop.")
+                        imu_process.terminate()
+                        imu_process.join()
+                        if not noLidar:
+                            lidar_process.terminate()
+                            lidar_process.join()
+
         except Exception as e:
-            print(e)
+            print(f"Error occurred: {e}")
+            e.with_traceback(sys.exc_info()[2])
             self._logger.error(f"An error occurred in PSTracker: {e}")
             imu_process.terminate()
             imu_process.join()
-            self._logger.info("IMU readings process terminated due to error.")
+            if not noLidar:
+                lidar_process.terminate()
+                lidar_process.join()
+            self._logger.info("Processes terminated due to error.")
 
+        return (xLocation.value, yLocation.value, angle.value, avgIterations / runCount if testing and runCount > 0 else 0, avgCost / runCount if testing and runCount > 0 else 0)
 
     def close(self):
         """
@@ -255,13 +492,12 @@ class PSTracker:
         self.lidar.disconnect()
         self._logger.info("PSTracker closed and resources released.")
 
-
-
-def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10, 
-         w: float = 0.2, c1: float = 0.3, c2: float = 1.5, sections: int = 16, targetTime: float = 1/15,
-         noLidar: bool = False):
+def main(self, debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = False, swarmSize: int = 10, 
+         w_xy: float = 0.2, c1_xy: float = 0.3, c2_xy: float = 1.5, w_angle: float = 0.2, c1_angle: float = 0.3, c2_angle: float = 1.5,
+         sections: int = 16, targetTime: float = 1/15,
+         noLidar: bool = False, motorPWM: int = 660, psoXYWeight: float = 0.5, psoAngleWeight: float = 0.5):
     try:
-        calibrateChoice = input("Calibrate IMUs? (y/N): ").strip().lower()
+        calibrateChoice = input("Calibrate individual IMUs? (y/N): ").strip().lower()
         if calibrateChoice == 'y':
             imus.calibrateAll(50)
             logging.info("IMUs calibrated successfully.")
@@ -270,32 +506,58 @@ def main(debug: bool = False, useOriginScan: bool = False, swarmSize: int = 10,
         else:
             print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
             return
-        tracker = PSTracker(swarmSize=swarmSize, w=w, c1=c1, c2=c2, sections=sections, targetTime=targetTime)
-        tracker.start(useOriginScan=useOriginScan, debug=debug, noLidar=noLidar)
+
+        calibrateChoice = input("Calibrate High Pass Filter and general Gyroscope bias? (y/N): ").strip().lower()
+        if calibrateChoice == 'y':
+            imus.calibrateHPFAndBiases(15)
+            logging.info("HPF and Gyro bias calibrated successfully.")
+        elif calibrateChoice == 'n' or calibrateChoice == '':
+            logging.info("Skipping HPF and Gyro bias calibration.")
+        else:
+            print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
+            return
+        
+        tracker = PSTracker(swarmSize=swarmSize, w_xy=w_xy, c1_xy=c1_xy, c2_xy=c2_xy, w_angle=w_angle, c1_angle=c1_angle, c2_angle=c2_angle,
+                sections=sections, targetTime=targetTime, motorPWM=motorPWM,
+                psoXYWeight=psoXYWeight, psoAngleWeight=psoAngleWeight)
+        tracker.start(useOriginScan=useOriginScan, debug=debug, noLidar=noLidar, noPSOAngle=noPSOAngle)
     finally:
         tracker.close()
         logging.info("PSTracker has been closed successfully.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PSTracker Command Line Options")
-    parser.add_argument('--swarmSize', type=int, default=10, help='Number of particles in the swarm')
-    parser.add_argument('--w', type=float, default=0.3, help='Inertia weight for PSO')
-    parser.add_argument('--c1', type=float, default=0.8, help='Cognitive coefficient for PSO')
-    parser.add_argument('--c2', type=float, default=2.5, help='Social coefficient for PSO')
+    parser.add_argument('--swarmSize', type=int, default=10, help='Number of particles in the swarm (default: 10)')
+    parser.add_argument('--w-xy', type=float, default=0.3, help='Inertia weight for PSO (XY position).')
+    parser.add_argument('--c1-xy', type=float, default=0.8, help='Cognitive coefficient for PSO (XY position).')
+    parser.add_argument('--c2-xy', type=float, default=2.5, help='Social coefficient for PSO (XY position).')
+    parser.add_argument('--w-angle', type=float, default=0.1, help='Inertia weight for PSO (angle).')
+    parser.add_argument('--c1-angle', type=float, default=0.8, help='Cognitive coefficient for PSO (angle).')
+    parser.add_argument('--c2-angle', type=float, default=1.1, help='Social coefficient for PSO (angle).')
     parser.add_argument('--sections', type=int, default=16, help='Number of sections for lidar scan comparison')
     parser.add_argument('--targetTime', type=float, default=1/15, help='Target time for the tracking loop')
     parser.add_argument('--motorPWM', type=int, default=660, help='Motor PWM value to set speed (0-1023)')
     parser.add_argument('--debug', action='store_true', help='Enable debug output')
     parser.add_argument('--originScan', action='store_true', help='Use origin scan as prior scan')
     parser.add_argument('--noLidar', action='store_true', help='Do not use lidar for tracking (for testing purposes)')
+    parser.add_argument('--noPSOAngle', action='store_true', help='Do not update angle from PSO results.')
+    parser.add_argument('--psoXYWeight', type=float, default=0.5, help='Weighting for PSO X and Y adjustments (0.0-1.0)')
+    parser.add_argument('--psoAngleWeight', type=float, default=0.5, help='Weighting for PSO angle adjustments (0.0-1.0)')
     args = parser.parse_args()
     main(
         debug=args.debug,
         useOriginScan=args.originScan,
+        noPSOAngle=args.noPSOAngle,
         swarmSize=args.swarmSize,
-        w=args.w,
-        c1=args.c1,
-        c2=args.c2,
+        w_xy=args.w_xy,
+        c1_xy=args.c1_xy,
+        c2_xy=args.c2_xy,
+        w_angle=args.w_angle,
+        c1_angle=args.c1_angle,
+        c2_angle=args.c2_angle,
         sections=args.sections,
-        targetTime=args.targetTime
+        targetTime=args.targetTime,
+        motorPWM=args.motorPWM,
+        psoXYWeight=args.psoXYWeight,
+        psoAngleWeight=args.psoAngleWeight
     )
