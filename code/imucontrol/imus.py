@@ -9,6 +9,8 @@
 import os
 import logging
 import numpy as np
+import time
+import copy
 from mpu9250_jmdev.mpu_9250 import MPU9250
 from mpu9250_jmdev.registers import *
 from imucontrol.imu import imu
@@ -87,6 +89,13 @@ class CAV_imus:
             # This is used to determine which IMU to use for each axis when calculating the average data.
             self.imuFB = None
             self.imuLR = None
+
+            self.taBias = 0 # Bias value for the turn angle rate
+            self.fbBias = 0 # Bias value for the FB acceleration
+            self.lrBias = 0 # Bias value for the LR acceleration
+
+            self.fbHPF = [0, 0] # High pass filter values for the FB acceleration
+            self.lrHPF = [0, 0] # High pass filter values for the LR acceleration
 
             self.initialized = True
 
@@ -186,6 +195,57 @@ class CAV_imus:
         except Exception as e:
             self._logger.error(f"Error during calibration: {e}")
 
+    def calibrateHPFAndBiases(self, duration: int):
+        ''' 
+        Over a set duration, gather data from all IMUs to determine high pass filter values.
+        Filter should exclude the middle 97% of stationary values to determine the noise floor.
+        An average check of this duration will also be done to determine a more general adjustment to the prior bias values.
+        '''
+
+        # Gather values from all IMUs using getAvgData() over the duration
+        startTime = time.time()
+        runningTime = time.time() - startTime
+        timestep = 0
+
+        fbValues = []
+        lrValues = []
+        taValues = []
+
+        while runningTime < duration:
+            data = self.getAvgData() # 0 = FB, 1 = LR, 2 = Turn Angle
+
+            priorRunningTime = copy.copy(runningTime)
+            runningTime = time.time() - startTime
+            timestep = runningTime - priorRunningTime
+
+            fbValues.append(data[0])
+            lrValues.append(data[1])
+            taValues.append(data[2], timestep)
+
+        # Process TA data to get estimated angle
+        totalAngle = 0
+        for value, timestep in taValues:
+            # Integrate the turn angle rate to get the estimated angle
+            totalAngle += value * timestep
+        self.taBias = totalAngle / duration # Update the turn angle bias
+
+        # Process FB and LR data to determine HPF values
+        fbValuesArray = np.array(fbValues)
+        lrValuesArray = np.array(lrValues)
+
+        # Calculate the 1.5% and 98.5% percentiles to exclude the middle 97% of values
+        fbFiltered = np.percentile(fbValuesArray, [1.5, 98.5])
+        lrFiltered = np.percentile(lrValuesArray, [1.5, 98.5])
+
+        # Calculate the HPF cutoffs are the 1.5th percentile and 98.5th percentile values for lower and upper bounds respectively
+        self.fbHPF = [fbFiltered[0], fbFiltered[1]]
+        self.lrHPF = [lrFiltered[0], lrFiltered[1]]
+
+        # Calculate rough FB and LR biases as the average of the middle 97% of gathered values
+        self.fbBias = np.mean(fbValuesArray[(fbValuesArray >= fbFiltered[0]) & (fbValuesArray <= fbFiltered[1])])
+        self.lrBias = np.mean(lrValuesArray[(lrValuesArray >= lrFiltered[0]) & (lrValuesArray <= lrFiltered[1])])
+
+
     def saveConfig(self):
         # Save IMU configuration, biases, noise values, and aliases to ~/configs/imu.conf
         try:
@@ -209,6 +269,12 @@ class CAV_imus:
                 file.write("IMU Aliases:\n")
                 for alias, imu_obj in self.imuAliases.items():
                     file.write(f"{alias}: IMU{self.imuList.index(imu_obj) + 1}\n")
+                # Save global bias and filter values
+                file.write(f"taBias: {self.taBias}\n")
+                file.write(f"fbBias: {self.fbBias}\n")
+                file.write(f"lrBias: {self.lrBias}\n")
+                file.write(f"fbHPF: {self.fbHPF}\n")
+                file.write(f"lrHPF: {self.lrHPF}\n")
             self._logger.info("IMU configuration and aliases saved to ~/configs/imu.conf.")
         except Exception as e:
             self._logger.error(f"Error saving configuration: {e}")
@@ -317,16 +383,39 @@ class CAV_imus:
             # Update the IMUs with the lowest noise values
             self.updateLowestNoiseIMUs()
 
-            # Parse imuAliases
+            # Parse imuAliases and new values
             aliasStartIndex = len(self.imuList) * 9
-            for line in lines[aliasStartIndex:]:
-                if "IMU Aliases:" in line:
+            # Find where the aliases end
+            i = aliasStartIndex
+            while i < len(lines):
+                line = lines[i].strip()
+                if line.startswith("IMU Aliases:"):
+                    i += 1
                     continue
-                alias, imuRef = line.strip().split(":")
-                alias = alias.strip()
-                imuIndex = int(imuRef.strip().split("IMU")[1]) - 1
-                self.imuAliases[alias] = self.imuList[imuIndex]
-            self._logger.info("IMU configuration and aliases imported from ~/configs/imu.conf.")
+                if any(line.startswith(x) for x in ["taBias:", "fbBias:", "lrBias:", "fbHPF:", "lrHPF:"]):
+                    break
+                if ":" in line:
+                    alias, imuRef = line.split(":")
+                    alias = alias.strip()
+                    imuIndex = int(imuRef.strip().split("IMU")[1]) - 1
+                    self.imuAliases[alias] = self.imuList[imuIndex]
+                i += 1
+            # Parse new values
+            for j in range(i, len(lines)):
+                line = lines[j].strip()
+                if line.startswith("taBias:"):
+                    self.taBias = float(line.split(":")[1].strip())
+                elif line.startswith("fbBias:"):
+                    self.fbBias = float(line.split(":")[1].strip())
+                elif line.startswith("lrBias:"):
+                    self.lrBias = float(line.split(":")[1].strip())
+                elif line.startswith("fbHPF:"):
+                    val = line.split(":")[1].strip(" []")
+                    self.fbHPF = list(map(float, val.split(",")))
+                elif line.startswith("lrHPF:"):
+                    val = line.split(":")[1].strip(" []")
+                    self.lrHPF = list(map(float, val.split(",")))
+            self._logger.info("IMU configuration, aliases, and biases imported from ~/configs/imu.conf.")
 
         except Exception as e:
             error_message = f"Error: Failed to read or parse ~/configs/imu.conf. {e}"
@@ -349,10 +438,6 @@ class CAV_imus:
         #       measurements being read out of sync from each other.
         #       This means the individual axes will be slightly more out of sync, but individual axis
         #       accuracy will increase.
-
-        # TODO: Averaging across all IMUs is not perfect, as the measurement of the most reliable IMU should be enough to determine an accurate values.
-        #       This is different for the turn angle, where averaging does seem to make the result more accurate (Noise is more random).
-        #       For acceleration, using the most reliable (or top 2) IMU(s) should be enough to determine an accurate value. Could be worse over longer periods of time however.
         
         for imu_obj in self.imuList:
             if imu_obj is not None:
@@ -411,7 +496,18 @@ class CAV_imus:
         else:
             avgLR = 0
 
-        return (avgFB, avgLR, avgTA) # Return the average values for FB, LR and Turn Angle.
+        # Apply high pass filter to FB and LR values
+        if self.fbHPF[0] < avgFB < self.fbHPF[1]:
+            avgFB = 0
+        else:
+            avgFB = avgFB - self.fbBias
+
+        if self.lrHPF[0] < avgLR < self.lrHPF[1]:
+            avgLR = 0
+        else:
+            avgLR = avgLR - self.lrBias
+
+        return (avgFB, avgLR, avgTA - self.taBias) # Return the average values for FB, LR and Turn Angle with estimated biases removed.
 
     def start(self):
         # Setup function to be run to initialise the IMUs.
