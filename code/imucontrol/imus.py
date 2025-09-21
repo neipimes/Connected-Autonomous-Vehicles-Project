@@ -195,7 +195,7 @@ class CAV_imus:
         except Exception as e:
             self._logger.error(f"Error during calibration: {e}")
 
-    def calibrateHPFAndBiases(self, duration: int):
+    def calibrateHPFBias(self, duration: int):
         ''' 
         Over a set duration, gather data from all IMUs to determine high pass filter values.
         Filter should exclude the middle 97% of stationary values to determine the noise floor.
@@ -292,7 +292,7 @@ class CAV_imus:
             print(error_message)
             self._logger.error(error_message)
             return
-        
+
         try:
             with open(config_path, "r") as file:
                 lines = file.readlines()
