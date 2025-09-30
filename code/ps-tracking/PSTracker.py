@@ -30,7 +30,8 @@ class PSTracker:
                  motorPWM: int = 660, 
                  qualityCutoff: int = 0,
                  psoXYWeight: float = 0.5,
-                 psoAngleWeight: float = 0.5):
+                 psoAngleWeight: float = 0.5,
+                 angleOffset: float = 307.5):
         """
         Initialize the PSTracker to grab IMU readings and run the PSO algorithm to track the particle swarm.
         :param swarmSize: Number of particles in the swarm.
@@ -69,6 +70,7 @@ class PSTracker:
         self.angleNoise = angleNoise
         self.psoXYWeight = psoXYWeight
         self.psoAngleWeight = psoAngleWeight
+        self.angleOffset = angleOffset
 
         # Initialize IMU and Lidar
         self.imuC = imus()
@@ -376,7 +378,8 @@ class PSTracker:
                         imuXReading=imuXReading,
                         imuYReading=imuYReading,
                         imuAngleReading=imuAngleReading,
-                        targetTime=self.targetTime
+                        targetTime=self.targetTime,
+                        angleOffset=self.angleOffset
                     )
                     results = pso.run()
                     self._logger.info(f"PSO estimation completed: {results}")
@@ -461,14 +464,14 @@ class PSTracker:
 def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = False, swarmSize: int = 10, 
          w_xy: float = 0.2, c1_xy: float = 0.3, c2_xy: float = 1.5, w_angle: float = 0.2, c1_angle: float = 0.3, c2_angle: float = 1.5,
          sections: int = 16, targetTime: float = 1/15,
-         noLidar: bool = False, motorPWM: int = 660, psoXYWeight: float = 0.5, psoAngleWeight: float = 0.5):
+         noLidar: bool = False, motorPWM: int = 660, psoXYWeight: float = 0.5, psoAngleWeight: float = 0.5, angleOffset: float = 307.5):
     try:
         # Initialize the PSTracker
         print("Initializing PSTracker...")
         sys.stdout.flush()
         tracker = PSTracker(swarmSize=swarmSize, w_xy=w_xy, c1_xy=c1_xy, c2_xy=c2_xy, w_angle=w_angle, c1_angle=c1_angle, c2_angle=c2_angle,
                 sections=sections, targetTime=targetTime, motorPWM=motorPWM,
-                psoXYWeight=psoXYWeight, psoAngleWeight=psoAngleWeight)
+                psoXYWeight=psoXYWeight, psoAngleWeight=psoAngleWeight, angleOffset=angleOffset)
 
         calibrateChoice = input("Calibrate individual IMUs? (y/N): ").strip().lower()
         if calibrateChoice == 'y':
@@ -516,6 +519,7 @@ if __name__ == "__main__":
     parser.add_argument('--noPSOAngle', action='store_true', help='Do not update angle from PSO results.')
     parser.add_argument('--psoXYWeight', type=float, default=0.5, help='Weighting for PSO X and Y adjustments (0.0-1.0)')
     parser.add_argument('--psoAngleWeight', type=float, default=0.5, help='Weighting for PSO angle adjustments (0.0-1.0)')
+    parser.add_argument('--angleOffset', type=float, default=307.5, help='Angle offset to adjust LiDAR scans (degrees)')
     args = parser.parse_args()
     main(
         debug=args.debug,
@@ -532,5 +536,6 @@ if __name__ == "__main__":
         targetTime=args.targetTime,
         motorPWM=args.motorPWM,
         psoXYWeight=args.psoXYWeight,
-        psoAngleWeight=args.psoAngleWeight
+        psoAngleWeight=args.psoAngleWeight,
+        angleOffset=args.angleOffset,
     )

@@ -5,7 +5,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 class PSO:
     def __init__(self, swarmSize: int, w_xy: float, c1_xy: float, c2_xy: float, w_angle: float, c1_angle: float, c2_angle: float,
-                 oldLidarScan: np.ndarray, newLidarScan: np.ndarray, sections: int = 16, imuXReading: float = 0.0,
+                 oldLidarScan: np.ndarray, newLidarScan: np.ndarray, angleOffset: float, sections: int = 16, imuXReading: float = 0.0,
                  imuYReading: float = 0.0, imuAngleReading: float = 0.0, xNoise: float = 0.1, yNoise: float = 0.1, 
                  angleNoise: float = 0.005, targetTime: float = 0.1):
         
@@ -20,15 +20,17 @@ class PSO:
         self.c1_angle = c1_angle
         self.c2_angle = c2_angle
 
+        self.angleOffset = angleOffset
+
         self.sections = sections
 
-        # Filter the lidar scans to remove low quality points
-        filteredOldTuple = self._filter_scan(oldLidarScan)
+        # Filter the lidar scans to remove low quality points and adjust angles by passed offset.
+        filteredOldTuple = self._filterAndAdjustScan(oldLidarScan, angleOffset)
         self.qualitiesOld = filteredOldTuple[0]
         self.anglesOld = filteredOldTuple[1]
         self.distancesOld = filteredOldTuple[2]
 
-        filteredNewTuple = self._filter_scan(newLidarScan)
+        filteredNewTuple = self._filterAndAdjustScan(newLidarScan, angleOffset)
         self.qualitiesNew = filteredNewTuple[0]
         self.anglesNew = filteredNewTuple[1]
         self.distancesNew = filteredNewTuple[2]
@@ -66,7 +68,7 @@ class PSO:
         cost = particle.calcCost(self.newLidarScan, self.anglesOld, self.distancesOld, self.sections)
         return particle, cost
 
-    def _update_particle(self, particle):
+    def _update_particle(self, particle: Particle):
         """Helper function to update a single particle's velocity, position, and cost."""
         particle.updateVelocity(
             self.best_particle,
@@ -77,7 +79,7 @@ class PSO:
         cost = particle.calcCost(self.newLidarScan, self.anglesOld, self.distancesOld, self.sections)
         return particle, cost
 
-    def _filter_scan(self, scan: np.ndarray):
+    def _filterAndAdjustScan(self, scan: np.ndarray, angleOffset: float):
 
         if not isinstance(scan, np.ndarray) or scan.ndim != 2 or scan.shape[1] != 3:
             raise ValueError("Lidar scan must be a Nx3 numpy array.")
@@ -90,6 +92,9 @@ class PSO:
         qualities = qualities[valid_mask]
         angles = angles[valid_mask]
         distances = distances[valid_mask]
+
+        # Adjust angles based on the provided offset
+        angles = (angles - angleOffset) % 360
 
         return (qualities, angles, distances)
 
