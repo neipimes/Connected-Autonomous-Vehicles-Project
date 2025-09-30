@@ -13,55 +13,6 @@ class Particle:
         self.angleVelocity = np.random.uniform(-0.1, 0.1)
 
         self.personalBest = (x, y, angle)
-
-    '''def calcEstLidarMeasurements(self, oldLidarScan: np.ndarray):
-        """
-        Calculate the expected lidar measurements based on the particle's position and angle.
-        This method should transform the lidar measurements according to the particle's pose.
-        Lidar measurements are a Numpy array of distance and angle pairs.
-        Assuming oldLidarScan is a Nx3 array where each row is [quality, angle, distance]
-        Transform lidar measurements based on the particle's position (x, y) and angle. The new
-        measurements will be in the same format as oldLidarScan.
-        """
-        if not isinstance(oldLidarScan, np.ndarray) or oldLidarScan.ndim != 2 or oldLidarScan.shape[1] != 3:
-            raise ValueError("oldLidarScan must be a Nx3 numpy array.")
-
-        # Vector triangle calculations with domain and division by zero checks
-        b = math.sqrt(self.x**2 + self.y**2)
-        if self.x == 0 or b == 0:
-            raise ValueError("Particle x and (x, y) position must not be zero to avoid division by zero.")
-        cos_deltaY = (self.x**2 + b**2 - self.y**2) / (2 * self.x * b)
-        cos_deltaY = min(max(cos_deltaY, -1.0), 1.0)
-        deltaY = math.degrees(math.acos(cos_deltaY))
-
-        # Vectorized implementation for efficiency
-        qualities = oldLidarScan[:, 0]
-        angles = oldLidarScan[:, 1]
-        distances = oldLidarScan[:, 2]
-        valid_mask = qualities >= 5
-        qualities = qualities[valid_mask]
-        angles = angles[valid_mask]
-        distances = distances[valid_mask]
-
-        # Calculate newDistance
-        angle_diff_rad = np.radians(angles - deltaY)
-        cos_angle_diff = np.cos(angle_diff_rad)
-        newDistances = np.sqrt(distances**2 + b**2 - 2 * distances * b * cos_angle_diff)
-
-        # Avoid division by zero in angleOppDistance
-        with np.errstate(divide='ignore', invalid='ignore'):
-            denom = 2 * b * newDistances
-            denom[denom == 0] = np.nan  # Avoid division by zero
-            cos_angleOpp = (b**2 + newDistances**2 - distances**2) / denom
-            cos_angleOpp = np.clip(cos_angleOpp, -1.0, 1.0)
-            angleOppDistances = np.degrees(np.arccos(cos_angleOpp))
-
-        angleDs = 180 - (self.angle - deltaY) - angleOppDistances
-        angleDs = np.mod(angleDs, 360)  # Normalize to [0, 360)
-
-        # Stack results
-        transformedScan = np.column_stack((qualities, angleDs, newDistances))
-        return transformedScan'''
     
     # Below are copilot generated functions that transform lidar scans to the particle frame using an explicit cartesian approach.
     def calcEstLidarMeasurements(self, angles: np.ndarray, distances: np.ndarray):
@@ -107,23 +58,6 @@ class Particle:
         This method should compare the expected lidar measurements with the actual ones.
         """
 
-        # Old implementation (commented out for reference)
-        # expectedScan = self.calcEstLidarMeasurements(oldLidarScan)
-        # bin_edges = np.linspace(0, 360, sections + 1)
-        # expected_bins = np.digitize(expectedScan[:, 1], bin_edges) - 1
-        # new_bins = np.digitize(newLidarScan[:, 1], bin_edges) - 1
-        # segmentCosts = np.zeros(sections)
-        # for i in range(sections):
-        #     expectedSegment = expectedScan[expected_bins == i]
-        #     newSegment = newLidarScan[new_bins == i]
-        #     if expectedSegment.size == 0 or newSegment.size == 0:
-        #         continue
-        #     distances = np.abs(expectedSegment[:, 2].mean() - newSegment[:, 2].mean())
-        #     segmentCosts[i] = distances
-        # totalCost = np.sum(segmentCosts)
-        # if sections > 0:
-        #     totalCost /= sections
-
         if not isinstance(newLidarScan, np.ndarray) or newLidarScan.ndim != 2 or newLidarScan.shape[1] != 3:
             raise ValueError("newLidarScan must be a Nx3 numpy array.")
         
@@ -154,14 +88,6 @@ class Particle:
 
         return totalCost
 
-    def updatePose(self, x, y, angle): # TODO: Might not be needed.
-        """
-        Update the particle's pose.
-        """
-        self.x = copy.deepcopy(x)
-        self.y = copy.deepcopy(y)
-        self.angle = copy.deepcopy(angle)
-
     def updateVelocity(self, best_particle, w_xy, c1_xy, c2_xy, w_angle, c1_angle, c2_angle):
         """
         Update the particle's velocity based on its own best position and the global best position.
@@ -189,13 +115,3 @@ class Particle:
        self.angle += self.angleVelocity
        # Normalize angle to [0, 360)
        self.angle = np.mod(self.angle, 360)
-
-    '''def transform_lidar_to_particle_frame_batch(self, lidar_scans: np.ndarray, particles: np.ndarray):
-        """
-        Batch version: lidar_scans is Nx3, particles is Mx3 (x, y, angle)
-        Returns: list of M arrays, each Nx3 [quality, angle, distance] in that particle's frame
-        """
-        results = []
-        for px, py, pa in particles:
-            results.append(self.transform_lidar_to_particle_frame(lidar_scans, px, py, pa))
-        return results'''

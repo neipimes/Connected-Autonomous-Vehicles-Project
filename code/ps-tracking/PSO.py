@@ -24,7 +24,7 @@ class PSO:
 
         self.sections = sections
 
-        # Filter the lidar scans to remove low quality points
+        # Filter the lidar scans to remove low quality points and adjust angles by passed offset.
         filteredOldTuple = self._filterAndAdjustScan(oldLidarScan, angleOffset)
         self.qualitiesOld = filteredOldTuple[0]
         self.anglesOld = filteredOldTuple[1]
@@ -68,7 +68,7 @@ class PSO:
         cost = particle.calcCost(self.newLidarScan, self.anglesOld, self.distancesOld, self.sections)
         return particle, cost
 
-    def _update_particle(self, particle):
+    def _update_particle(self, particle: Particle):
         """Helper function to update a single particle's velocity, position, and cost."""
         particle.updateVelocity(
             self.best_particle,
