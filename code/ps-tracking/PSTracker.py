@@ -20,7 +20,7 @@ logging.basicConfig(filename=os.path.expanduser("~/logs/pstracker.log"), level=l
 
 class PSTracker:
     def __init__(self,
-                 swarmSize: int, 
+                swarmSize: int, 
                  w_xy: float, c1_xy: float, c2_xy: float, w_angle: float, c1_angle: float, c2_angle: float,
                  sections: int = 16,
                  xNoise: float = 0.1,
@@ -71,7 +71,8 @@ class PSTracker:
         self.psoAngleWeight = psoAngleWeight
 
         # Initialize IMU and Lidar
-        imus.start()
+        self.imuC = imus()
+        self.imuC.start()
         self.lidar = RPLidar('/dev/ttyUSB0', baudrate=256000) #TODO: Add adjustability for lidar port. Config file?
         if self.lidar is None:
             self._logger.error("Failed to connect to LiDAR. Please check the connection.")
@@ -87,7 +88,7 @@ class PSTracker:
         self._logger.info(f"PSTracker initialized with swarmSize={swarmSize}, w_xy={w_xy}, c1_xy={c1_xy}, c2_xy={c2_xy}, w_angle={w_angle}, c1_angle={c1_angle}, c2_angle={c2_angle}, sections={sections}, targetTime={targetTime}.")
 
     @staticmethod
-    def runIMUReadings(xLocation, yLocation, angle, psoUpdate, mutex, debug=True):
+    def runIMUReadings(imuC: imus, xLocation, yLocation, angle, psoUpdate, mutex, debug=True):
         """
         Continuously read IMU data and return the latest readings.
         This method runs in a separate process to avoid blocking the main thread.
@@ -147,10 +148,13 @@ class PSTracker:
                         yDisplacement = yLocation.value
                         angleValue = angle.value
 
+                        priorXVelocity = xVelocity
+                        priorYVelocity = yVelocity
+
                         # Recalculate velocities based on change in displacement if previous values exist
                         if preXDisplacement is not None and preYDisplacement is not None and psoTimestep is not None and psoTimestep > 0:
-                            xVelocity = (xDisplacement - preXDisplacement) / psoTimestep
-                            yVelocity = (yDisplacement - preYDisplacement) / psoTimestep
+                            xVelocity = ((xDisplacement - preXDisplacement) / psoTimestep)*0.5 + priorXVelocity*0.5
+                            yVelocity = ((yDisplacement - preYDisplacement) / psoTimestep)*0.5 + priorYVelocity*0.5
                         else:
                             xVelocity = 0.0
                             yVelocity = 0.0
@@ -207,7 +211,7 @@ class PSTracker:
                         sys.stdout.flush()  # Ensure the output is printed immediately
 
 
-            data = imus.getAvgData() # Blocking call to get IMU data
+            data = imuC.getAvgData() # Blocking call to get IMU data
             
             priorRunningTime = currentRunningTime
             currentRunningTime = time.time() - startTime
@@ -250,8 +254,8 @@ class PSTracker:
         try:
             scan_iterator = lidar.iter_scans(max_buf_meas=3000, scan_type='normal')
 
-            # Drop the first 10 scans to ensure stable data
-            for _ in range(10):
+            # Drop the first 5 scans to ensure stable data
+            for _ in range(5):
                 next(scan_iterator)
                 print("Dropped scan")
                 sys.stdout.flush()
@@ -292,7 +296,7 @@ class PSTracker:
 
             imuProcessStartTime = time.time()
             # Start IMU readings in a separate process
-            imu_process = mp.Process(target=PSTracker.runIMUReadings, args=(xLocation, yLocation, angle, psoUpdate, mutex, debug))
+            imu_process = mp.Process(target=PSTracker.runIMUReadings, args=(self.imuC, xLocation, yLocation, angle, psoUpdate, mutex, debug))
             imu_process.start()
             self._logger.info("IMU readings process started.")
             print(f"IMU readings process started in {time.time() - imuProcessStartTime:.4f} s") if debug else None
@@ -459,9 +463,17 @@ def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = Fa
          sections: int = 16, targetTime: float = 1/15,
          noLidar: bool = False, motorPWM: int = 660, psoXYWeight: float = 0.5, psoAngleWeight: float = 0.5):
     try:
+        # Initialize the PSTracker
+        print("Initializing PSTracker...")
+        sys.stdout.flush()
+        tracker = PSTracker(swarmSize=swarmSize, w_xy=w_xy, c1_xy=c1_xy, c2_xy=c2_xy, w_angle=w_angle, c1_angle=c1_angle, c2_angle=c2_angle,
+                sections=sections, targetTime=targetTime, motorPWM=motorPWM,
+                psoXYWeight=psoXYWeight, psoAngleWeight=psoAngleWeight)
+
         calibrateChoice = input("Calibrate individual IMUs? (y/N): ").strip().lower()
         if calibrateChoice == 'y':
-            imus.calibrateAll(50)
+            print("Running individual IMU calibration for 50 samples. Please keep the car stationary.")
+            tracker.imuC.calibrateAll(50)
             logging.info("IMUs calibrated successfully.")
         elif calibrateChoice == 'n' or calibrateChoice == '':
             logging.info("Skipping IMU calibration.")
@@ -469,20 +481,18 @@ def main(debug: bool = False, useOriginScan: bool = False, noPSOAngle: bool = Fa
             print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
             return
 
-        calibrateChoice = input("Calibrate High Pass Filter and general Gyroscope bias? (y/N): ").strip().lower()
-        if calibrateChoice == 'y':
-            imus.calibrateHPFBias(15)
-            #imus.printSmthButNoSelf()
+        calibrateChoice2 = input("Calibrate High Pass Filter and general Gyroscope bias? (y/N): ").strip().lower()
+        if calibrateChoice2 == 'y':
+            print("Running HPF and Gyro bias calibration for 30 seconds. Please keep the car stationary.")
+            tracker.imuC.calibrateHPFBias(30)
             logging.info("HPF and Gyro bias calibrated successfully.")
-        elif calibrateChoice == 'n' or calibrateChoice == '':
+        elif calibrateChoice2 == 'n' or calibrateChoice2 == '':
             logging.info("Skipping HPF and Gyro bias calibration.")
         else:
             print("Invalid choice. Please enter 'y' or 'n' or <Enter>.")
             return
         
-        tracker = PSTracker(swarmSize=swarmSize, w_xy=w_xy, c1_xy=c1_xy, c2_xy=c2_xy, w_angle=w_angle, c1_angle=c1_angle, c2_angle=c2_angle,
-                sections=sections, targetTime=targetTime, motorPWM=motorPWM,
-                psoXYWeight=psoXYWeight, psoAngleWeight=psoAngleWeight)
+        
         tracker.start(useOriginScan=useOriginScan, debug=debug, noLidar=noLidar, noPSOAngle=noPSOAngle)
     finally:
         tracker.close()

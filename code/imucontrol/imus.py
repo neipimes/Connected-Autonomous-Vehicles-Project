@@ -198,7 +198,7 @@ class CAV_imus:
     def calibrateHPFBias(self, duration: int):
         ''' 
         Over a set duration, gather data from all IMUs to determine high pass filter values.
-        Filter should exclude the middle 97% of stationary values to determine the noise floor.
+        Filter should exclude the middle 99% of stationary values to determine the noise floor.
         An average check of this duration will also be done to determine a more general adjustment to the prior bias values.
         '''
         try:
@@ -220,7 +220,7 @@ class CAV_imus:
 
                 fbValues.append(data[0])
                 lrValues.append(data[1])
-                taValues.append(data[2], timestep)
+                taValues.append((data[2], timestep)) # Store the timestep with the turn angle rate value
 
             # Process TA data to get estimated angle
             totalAngle = 0
@@ -233,9 +233,9 @@ class CAV_imus:
             fbValuesArray = np.array(fbValues)
             lrValuesArray = np.array(lrValues)
 
-            # Calculate the 1.5% and 98.5% percentiles to exclude the middle 97% of values
-            fbFiltered = np.percentile(fbValuesArray, [1.5, 98.5])
-            lrFiltered = np.percentile(lrValuesArray, [1.5, 98.5])
+            # Calculate the 0.5% and 99.5% percentiles to exclude the middle 99% of values
+            fbFiltered = np.percentile(fbValuesArray, [0.5, 99.5])
+            lrFiltered = np.percentile(lrValuesArray, [0.5, 99.5])
 
             # Calculate the HPF cutoffs are the 1.5th percentile and 98.5th percentile values for lower and upper bounds respectively
             self.fbHPF = [fbFiltered[0], fbFiltered[1]]
@@ -476,7 +476,7 @@ class CAV_imus:
         # Calculate FB (Front-Back) acceleration using the two IMUs with lowest FB noise
         fb_imus = sorted(
             [(imu_obj, imu_obj.getFBAcellNoise(), imu_obj.getFBAccelData())
-             for imu_obj in CAV_imus.imuList if imu_obj is not None],
+             for imu_obj in self.imuList if imu_obj is not None],
             key=lambda x: x[1]
         )[:2]
 
@@ -490,7 +490,7 @@ class CAV_imus:
         # Calculate LR (Left-Right) acceleration using the two IMUs with lowest LR noise
         lr_imus = sorted(
             [(imu_obj, imu_obj.getLRAcellNoise(), imu_obj.getLRAccelData())
-             for imu_obj in CAV_imus.imuList if imu_obj is not None],
+             for imu_obj in self.imuList if imu_obj is not None],
             key=lambda x: x[1]
         )[:2]
 
@@ -502,12 +502,12 @@ class CAV_imus:
             avgLR = 0
 
         # Apply high pass filter to FB and LR values
-        if self.fbHPF[0] < avgFB < self.fbHPF[1]:
+        if self.fbHPF[0] < avgFB - self.fbBias < self.fbHPF[1]:
             avgFB = 0
         else:
             avgFB = avgFB - self.fbBias
 
-        if self.lrHPF[0] < avgLR < self.lrHPF[1]:
+        if self.lrHPF[0] < avgLR - self.lrBias < self.lrHPF[1]:
             avgLR = 0
         else:
             avgLR = avgLR - self.lrBias
