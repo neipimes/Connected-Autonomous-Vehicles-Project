@@ -14,24 +14,30 @@ class Particle:
 
         self.personalBest = (x, y, angle)
     
-    # Below are copilot generated functions that transform lidar scans to the particle frame using an explicit cartesian approach.
-    def calcEstLidarMeasurements(self, angles: np.ndarray, distances: np.ndarray):
+    @staticmethod
+    def shiftLidarScan(angles: np.ndarray, distances: np.ndarray, xChange: float, yChange: float, angleChange: float):
         """
-        Explicitly transform lidar scan points from the robot frame to the particle frame.
-        lidar_scan: Nx3 array [quality, angle (deg), distance]
-        Returns: Nx3 array [quality, angle (deg, in particle frame), distance (in particle frame)]
+        Shift the lidar scan by the given x, y, and angle changes.
+        angles: 1D array of angles in degrees
+        distances: 1D array of distances
+        xChange: change in x position
+        yChange: change in y position
+        angleChange: change in angle in degrees
+        Returns: shifted angles and distances as 1D arrays
         """
-
+        if len(angles) != len(distances):
+            raise ValueError("Angles and distances must have the same length.")
+        
         # Convert polar to Cartesian in robot frame
         x_robot = distances * np.sin(np.radians(angles)) # Sine and cosine are swapped here to match the polar lidar coordinate system.
         y_robot = distances * np.cos(np.radians(angles))
 
         # Transform to particle frame: translate by -self.x, -self.y
-        x_trans = x_robot - self.x
-        y_trans = y_robot - self.y
+        x_trans = x_robot - xChange
+        y_trans = y_robot - yChange
 
         # Rotate by -self.angle (to align with particle orientation)
-        theta = np.radians(-self.angle)
+        theta = np.radians(-angleChange)
         cos_theta = np.cos(theta)
         sin_theta = np.sin(theta)
         x_part = cos_theta * x_trans - sin_theta * y_trans
@@ -42,7 +48,19 @@ class Particle:
         angles_part = np.degrees(np.arctan2(y_part, x_part))
         angles_part = np.mod(angles_part, 360)
 
+        return angles_part, distances_part
+
+    # Below are copilot generated functions that transform lidar scans to the particle frame using an explicit cartesian approach.
+    def calcEstLidarMeasurements(self, angles: np.ndarray, distances: np.ndarray):
+        """
+        Wrapper of Particle.shiftLidarScan.
+        angles: 1D array of angles in degrees
+        distances: 1D array of distances
+        Returns: Nx2 array [angle (deg, in particle frame), distance (in particle frame)]
+        """
+        angles_part, distances_part = Particle.shiftLidarScan(angles, distances, self.x, self.y, self.angle)
         return np.column_stack((angles_part, distances_part))
+
 
     def sector_mean_bincount(self, distances, bin_idx, sections: int):
         # Function used to calculate mean distances in each sector using numpy bincount. Written by yanqing.liu@curtin.edu.au
