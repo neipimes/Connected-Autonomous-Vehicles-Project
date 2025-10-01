@@ -1,3 +1,4 @@
+import os
 from Particle import Particle
 import numpy as np
 import copy, time
@@ -40,7 +41,7 @@ class PSO:
         self.best_particle = None
 
         # Parallelize particle initialization
-        with ProcessPoolExecutor() as executor:
+        with ProcessPoolExecutor(max_workers=int(os.cpu_count()/2)) as executor:
             futures = [
                 executor.submit(self._initialize_particle, imuXReading, imuYReading, imuAngleReading, xNoise, yNoise, angleNoise)
                 for _ in range(self.swarmSize)
@@ -109,7 +110,7 @@ class PSO:
             iterCount += 1
 
             # Parallelize particle updates and cost calculations
-            with ProcessPoolExecutor() as executor:
+            with ProcessPoolExecutor(max_workers=(os.cpu_count()/2)) as executor:
                 futures = {executor.submit(self._update_particle, particle): particle for particle in self.particles}
                 for future in as_completed(futures):
                     particle, cost = future.result()
@@ -127,3 +128,38 @@ class PSO:
         return ({'x': self.best_particle.x, 'y': self.best_particle.y, 'angle': self.best_particle.angle,
                 'cost': self.best_particle.cost, 'totalTime': totalTime, 'iterCount': iterCount,
                 'trueTotalTime': trueTotalTime, 'initTime': self.initTime})
+
+    def runWithIterations(self, maxIterations: int):
+        startTime = time.time()
+        iterCount = 0
+
+        costs = []
+        iterRunTimes = []
+
+        while iterCount < maxIterations:
+            iterCount += 1
+            iterationStartTime = time.time()
+
+            # Parallelize particle updates and cost calculations
+            with ProcessPoolExecutor(max_workers=int(os.cpu_count()/2)) as executor:
+                futures = {executor.submit(self._update_particle, particle): particle for particle in self.particles}
+                for future in as_completed(futures):
+                    particle, cost = future.result()
+                    if self.best_particle is None or cost < self.best_particle.cost:
+                        # Update the best particle in a thread-safe manner
+                        self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
+                        self.best_particle.cost = cost
+
+            iterationRunTime = time.time() - iterationStartTime
+            iterRunTimes.append(iterationRunTime)
+            costs.append(self.best_particle.cost)
+
+        runTime = time.time() - startTime
+        iterRunTimes = np.array(iterRunTimes)
+        avgIterTime = np.mean(iterRunTimes) if iterRunTimes.size > 0 else 0
+
+        # Return the best particle's position, angle, cost and total time taken.
+        return ({'x': self.best_particle.x, 'y': self.best_particle.y, 'angle': self.best_particle.angle,
+                'cost': self.best_particle.cost, 'totalTime': runTime,
+                'trueTotalTime': time.time() - self.trueStartTime, 'initTime': self.initTime,
+                'avgIterTime': avgIterTime})
