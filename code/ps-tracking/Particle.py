@@ -8,8 +8,8 @@ class Particle:
         self.angle = angle
         self.cost = float('inf')  # Initialize cost to infinity
 
-        self.xVelocity = np.random.uniform(-1, 1)
-        self.yVelocity = np.random.uniform(-1, 1)
+        self.xVelocity = np.random.uniform(-10, 10)
+        self.yVelocity = np.random.uniform(-10, 10)
         self.angleVelocity = np.random.uniform(-0.1, 0.1)
 
         self.personalBest = (x, y, angle)
