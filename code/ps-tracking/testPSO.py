@@ -93,7 +93,7 @@ def testPsoAlgorithm(xPositionChanges,
                                         for xyC1 in xyC1Vals:
                                             for xyC2 in xyC2Vals:
                                                 for sectionCount in sectionCounts:
-                                                    print(f"Swarm Size: {swarmSize}, Max Iterations: {maxIter}, W: {aW}, C1: {aC1}, C2: {aC2}, XY W: {xyW}, XY C1: {xyC1}, XY C2: {xyC2}, Section Count: {sectionCount}")
+                                                    print(f"Swarm Size: {swarmSize}, Max Iterations: {maxIter}, XChange: {xChange}, YChange: {yChange}, AngleChange: {angleChange}, W: {aW}, C1: {aC1}, C2: {aC2}, XY W: {xyW}, XY C1: {xyC1}, XY C2: {xyC2}, Section Count: {sectionCount}")
 
                                                     runtimes = []
                                                     accuracies = []
@@ -121,7 +121,7 @@ def testPsoAlgorithm(xPositionChanges,
                                                         accuracies.append((xAccuracy, yAccuracy, angleAccuracy))
                                                         costs.append(result["cost"])
 
-                                                    print(f"Average Runtime: {np.mean(runtimes):.2f}s, Average Accuracy: {np.mean(accuracies):.2f}, Average Cost: {np.mean(costs):.2f}")
+                                                    print(f"Average Runtime: {np.mean(runtimes):.2f}s, Average Accuracy: {np.mean(accuracies):.2f}, Average Cost: {np.mean(costs):.2f}\n")
 
 
 def main(configFile='testing/testPSO.conf'):
