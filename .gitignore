@@ -200,3 +200,4 @@ cython_debug/
 
 # Additional project ignore rules
 code/ps-tracking/testing/
+code/ps-tracking/testing/expTestPSO.conf
