@@ -132,16 +132,20 @@ class PSO:
         startTime = time.time()
         iterCount = 0
 
-        costs = []
+        average_costs = []
+        best_costs = []
         iterRunTimes = []
 
         while iterCount < maxIterations:
             iterCount += 1
             iterationStartTime = time.time()
 
+            iterCosts = []
+
             # Update particles sequentially
             for particle in self.particles:
                 particle, cost = self._update_particle(particle)
+                iterCosts.append(cost)
                 if self.best_particle is None or cost < self.best_particle.cost:
                     # Update the best particle
                     self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
@@ -149,7 +153,8 @@ class PSO:
 
             iterationRunTime = time.time() - iterationStartTime
             iterRunTimes.append(iterationRunTime)
-            costs.append(self.best_particle.cost)
+            best_costs.append(self.best_particle.cost)
+            average_costs.append(np.mean(iterCosts) if len(iterCosts) > 0 else 0)
 
         runTime = time.time() - startTime
         iterRunTimes = np.array(iterRunTimes)
@@ -157,6 +162,6 @@ class PSO:
 
         # Return the best particle's position, angle, cost and total time taken.
         return ({'x': self.best_particle.x, 'y': self.best_particle.y, 'angle': self.best_particle.angle,
-                'cost': self.best_particle.cost, 'totalTime': runTime,
+                'cost': self.best_particle.cost, 'best_costs': best_costs, 'avg_costs': average_costs, 'totalTime': runTime,
                 'trueTotalTime': time.time() - self.trueStartTime, 'initTime': self.initTime,
                 'avgIterTime': avgIterTime})

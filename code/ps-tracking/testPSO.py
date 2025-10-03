@@ -4,6 +4,7 @@ from Particle import Particle
 import configparser
 import numpy as np
 import time, random, sys
+import matplotlib.pyplot as plt
 
 def importParametersFromConfig(configFile):
     # Load configuration file
@@ -64,6 +65,49 @@ def offsetScanAngle(scan, offset):
     scan[:, 1] = (scan[:, 1] - offset) % 360
     return scan
 
+def buildSwarmSizeGraphs(swarmSizeResults):
+    # Using matplotlib to plot swarm size results
+    # First graph - Average Inaccuracy vs Swarm Size: All three inaccuracies on one graph
+    # Second graph - Average Cost vs Swarm Size
+    # Third graph - Average Runtime vs Swarm Size
+
+    swarmSizes = [result[0] for result in swarmSizeResults]
+    avgXInaccuracies = [result[1] for result in swarmSizeResults]
+    avgYInaccuracies = [result[2] for result in swarmSizeResults]
+    avgAngleInaccuracies = [result[3] for result in swarmSizeResults]
+    avgCosts = [result[4] for result in swarmSizeResults]
+    avgRuntimes = [result[5] for result in swarmSizeResults]
+
+    plt.figure(figsize=(18, 5))
+
+    # First graph
+    plt.subplot(1, 3, 1)
+    plt.plot(swarmSizes, avgXInaccuracies, label='X Inaccuracy')
+    plt.plot(swarmSizes, avgYInaccuracies, label='Y Inaccuracy')
+    plt.plot(swarmSizes, avgAngleInaccuracies, label='Angle Inaccuracy')
+    plt.title('Average Inaccuracy vs Swarm Size')
+    plt.xlabel('Swarm Size')
+    plt.ylabel('Average Inaccuracy')
+    plt.legend()
+
+    # Second graph
+    plt.subplot(1, 3, 2)
+    plt.plot(swarmSizes, avgCosts, label='Average Cost', color='orange')
+    plt.title('Average Cost vs Swarm Size')
+    plt.xlabel('Swarm Size')
+    plt.ylabel('Average Cost')
+
+    # Third graph
+    plt.subplot(1, 3, 3)
+    plt.plot(swarmSizes, avgRuntimes, label='Average Runtime', color='green')
+    plt.title('Average Runtime vs Swarm Size')
+    plt.xlabel('Swarm Size')
+    plt.ylabel('Average Runtime')
+
+    plt.tight_layout()
+    plt.show()
+
+
 ### PSO testing framework
 
 # Test structure. Has been modified to allow optional passing of a second scan for comparison.
@@ -88,7 +132,7 @@ def testPsoAlgorithm(xPositionChanges,
             for angleChange in angleChanges:
                 adjustedScan = adjustScanPosition(scan1, xChange, yChange, angleChange) if scan2 is None else scan2
 
-                for swarmSize in swarmSizes:
+                for sectionCount in sectionCounts:
                     for maxIter in maxIterations:
                         for aW in angleWVals:
                             for aC1 in angleC1Vals:
@@ -96,11 +140,12 @@ def testPsoAlgorithm(xPositionChanges,
                                     for xyW in xyWVals:
                                         for xyC1 in xyC1Vals:
                                             for xyC2 in xyC2Vals:
-                                                for sectionCount in sectionCounts:
+                                                ssInaccuracyResults = [] # List of tuples (swarmSize, avgXInaccuracy, avgYInaccuracy, avgAngleInaccuracy, avgCost, avgRuntime)
+                                                for swarmSize in swarmSizes:
                                                     print(f"Swarm Size: {swarmSize}, Max Iterations: {maxIter}, XChange: {xChange}, YChange: {yChange}, AngleChange: {angleChange}, W: {aW}, C1: {aC1}, C2: {aC2}, XY W: {xyW}, XY C1: {xyC1}, XY C2: {xyC2}, Section Count: {sectionCount}")
 
                                                     runtimes = []
-                                                    accuracies = []
+                                                    inaccuracies = []
                                                     costs = []
                                                     runResults = []
 
@@ -108,8 +153,8 @@ def testPsoAlgorithm(xPositionChanges,
                                                         # Initialize PSO with parameters
                                                         pso = PSO(swarmSize=swarmSize, w_xy=xyW, c1_xy=xyC1, c2_xy=xyC2,
                                                                 w_angle=aW, c1_angle=aC1, c2_angle=aC2, oldLidarScan=scan1,
-                                                                newLidarScan=adjustedScan, angleOffset=0, imuXReading=random.uniform(-10,10), 
-                                                                imuYReading=random.uniform(-10,10), imuAngleReading=(random.uniform(-0.3,0.3)%360))
+                                                                newLidarScan=adjustedScan, angleOffset=0, imuXReading=random.uniform(xChange - abs(xChange * 0.25),xChange + abs(xChange * 0.25)), 
+                                                                imuYReading=random.uniform(yChange - abs(yChange * 0.25),yChange + abs(yChange * 0.25)), imuAngleReading=(random.uniform(angleChange - abs(angleChange * 0.25),angleChange + abs(angleChange * 0.25))%360))
 
                                                         # Run PSO on simulated scans
                                                         startTime = time.time()
@@ -127,14 +172,17 @@ def testPsoAlgorithm(xPositionChanges,
                                                         angle_diff = (result["angle"] - angleChange) % 360
                                                         angleAccuracy = min(angle_diff, 360 - angle_diff)
 
-                                                        accuracies.append((xAccuracy, yAccuracy, angleAccuracy))
+                                                        inaccuracies.append((xAccuracy, yAccuracy, angleAccuracy))
                                                         runResults.append((result["x"], result["y"], result["angle"]))
                                                         costs.append(result["cost"])
 
-                                                    print(f"Average Runtime: {np.mean(runtimes):.2f}s,\nAverage X Inaccuracy: {np.mean([acc[0] for acc in accuracies]):.2f},\nAverage Y Inaccuracy: {np.mean([acc[1] for acc in accuracies]):.2f},\nAverage Angle Inaccuracy: {np.mean([acc[2] for acc in accuracies]):.2f},\nAverage X: {np.mean([pos[0] for pos in runResults]):.2f}, Average Y: {np.mean([pos[1] for pos in runResults]):.2f},\nAverage Angle: {np.mean([pos[2] for pos in runResults]):.2f},\nAverage Cost: {np.mean(costs):.2f}\n")
+                                                    inaccuraciesPercentage = [(abs(acc[0])/max(abs(xChange),1), abs(acc[1])/max(abs(yChange),1), abs(acc[2])/max(abs(angleChange),1)) for acc in inaccuracies]
+                                                    print(f"Average Runtime: {np.mean(runtimes):.2f}s,\nAverage X Inaccuracy: {np.mean([acc[0] for acc in inaccuracies]):.2f} ({(np.mean([acc[0] for acc in inaccuraciesPercentage])*100):.2f}%),\nAverage Y Inaccuracy: {np.mean([acc[1] for acc in inaccuracies]):.2f} ( {(np.mean([acc[1] for acc in inaccuraciesPercentage])*100):.2f}%),\nAverage Angle Inaccuracy: {np.mean([acc[2] for acc in inaccuracies]):.2f} ( {(np.mean([acc[2] for acc in inaccuraciesPercentage])*100):.2f}%),\nAverage X: {np.mean([pos[0] for pos in runResults]):.2f}, Average Y: {np.mean([pos[1] for pos in runResults]):.2f},\nAverage Angle: {np.mean([pos[2] for pos in runResults]):.2f},\nAverage Cost: {np.mean(costs):.2f}\n")
 
                                                     # Gather and save metrics from run
-                                                    #TODO: buildGraphs()
+                                                    ssInaccuracyResults.append((swarmSize, np.mean([acc[0] for acc in inaccuraciesPercentage]), np.mean([acc[1] for acc in inaccuraciesPercentage]), np.mean([acc[2] for acc in inaccuraciesPercentage]), np.mean(costs), np.mean(runtimes)))
+                                                #TODO: swarmsize comparison for this parameter set.
+                                                buildSwarmSizeGraphs(ssInaccuracyResults)
 
 
 def main(configFile='testing/testPSO.conf'):
