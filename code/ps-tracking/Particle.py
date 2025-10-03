@@ -8,9 +8,9 @@ class Particle:
         self.angle = angle
         self.cost = float('inf')  # Initialize cost to infinity
 
-        self.xVelocity = np.random.uniform(-1, 1)
-        self.yVelocity = np.random.uniform(-1, 1)
-        self.angleVelocity = np.random.uniform(-0.1, 0.1)
+        self.xVelocity = np.random.uniform(-10, 10)
+        self.yVelocity = np.random.uniform(-10, 10)
+        self.angleVelocity = np.random.uniform(-0.05, 0.05)
 
         self.personalBest = (x, y, angle)
     
@@ -45,7 +45,7 @@ class Particle:
 
         # Convert back to polar in particle frame
         distances_part = np.sqrt(x_part**2 + y_part**2)
-        angles_part = np.degrees(np.arctan2(y_part, x_part))
+        angles_part = np.degrees(np.arctan2(x_part, y_part))  # Swapped to match LiDAR coordinate system
         angles_part = np.mod(angles_part, 360)
 
         return angles_part, distances_part
@@ -87,11 +87,11 @@ class Particle:
         # Optimized: Use numpy digitize to bin angles into sections for efficiency
         bin_edges = np.linspace(0, 360, sections + 1)
         expected_bins = np.digitize(expectedScan[:, 0], bin_edges) - 1
-        new_bins = np.digitize(newLidarScan[:, 0], bin_edges) - 1
+        new_bins = np.digitize(newLidarScan[:, 1], bin_edges) - 1
 
         # Calculate mean distances for each bin using bincount courtesy of yanqing.liu@curtin.edu.au
         expected_means = self.sector_mean_bincount(expectedScan[:, 1], expected_bins, sections)
-        new_means = self.sector_mean_bincount(newLidarScan[:, 1], new_bins, sections)
+        new_means = self.sector_mean_bincount(newLidarScan[:, 2], new_bins, sections)
 
         # Compute segment costs using absolute differences
         segmentCosts = np.abs(expected_means - new_means)
