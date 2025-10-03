@@ -106,16 +106,17 @@ class PSO:
             # Update particles sequentially
             for particle in self.particles:
                 particle, cost = self._update_particle(particle)
-                '''if self.best_particle is None or cost < self.best_particle.cost:
+                if self.best_particle is None or cost < self.best_particle.cost:
                     # Update the best particle
                     self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
-                    self.best_particle.cost = cost'''
+                    self.best_particle.cost = cost
 
+            '''
             # Check for global best particle after all particles have been updated
             for particle in self.particles:
                 if self.best_particle is None or particle.cost < self.best_particle.cost:
                     self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
-                    self.best_particle.cost = particle.cost
+                    self.best_particle.cost = particle.cost'''
 
             lastIterTime = time.time() - iterationRunTime
 
