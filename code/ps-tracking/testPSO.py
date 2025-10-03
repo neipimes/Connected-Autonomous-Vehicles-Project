@@ -4,6 +4,7 @@ from Particle import Particle
 import configparser
 import numpy as np
 import time, random, sys
+import os, json, csv
 import matplotlib.pyplot as plt
 
 def importParametersFromConfig(configFile):
@@ -12,9 +13,9 @@ def importParametersFromConfig(configFile):
     config.read(configFile)
 
     # Extract parameter values
-    xPositionChanges = list(map(int, config['XPositionChanges']['values'].split(',')))
-    yPositionChanges = list(map(int, config['YPositionChanges']['values'].split(',')))
-    angleChanges = list(map(int, config['AngleChanges']['values'].split(',')))
+    xPositionChanges = list(map(float, config['XPositionChanges']['values'].split(',')))
+    yPositionChanges = list(map(float, config['YPositionChanges']['values'].split(',')))
+    angleChanges = list(map(float, config['AngleChanges']['values'].split(',')))
     swarmSizes = list(map(int, config['SwarmSize']['values'].split(',')))
     maxIterations = list(map(int, config['MaxIterationCount']['values'].split(',')))
     angleWVals = list(map(float, config['AngleWVals']['values'].strip('{}').split(',')))
@@ -109,6 +110,111 @@ def buildSwarmSizeGraphs(swarmSizeResults):
 
 
 ### PSO testing framework
+def testSingleRun(xChange, 
+                     yChange, 
+                     angleChange, 
+                     swarmSize, 
+                     maxIter, 
+                     aW, 
+                     aC1, 
+                     aC2, 
+                     xyW, 
+                     xyC1, 
+                     xyC2, 
+                     sectionCount,
+                     numRuns,
+                     scan1,
+                     scan2 = None):
+    xChange = xChange[0]
+    yChange = yChange[0]
+    angleChange = angleChange[0]
+
+    if scan2 is None:
+        adjustedScan = adjustScanPosition(scan1, xChange, yChange, angleChange)
+    else:
+        adjustedScan = scan2    
+
+    # Initialize PSO with parameters
+    pso = PSO(swarmSize=swarmSize[0], w_xy=xyW[0], c1_xy=xyC1[0], c2_xy=xyC2[0],
+            w_angle=aW[0], c1_angle=aC1[0], c2_angle=aC2[0], oldLidarScan=scan1,
+            newLidarScan=adjustedScan, angleOffset=0, sections=sectionCount[0], imuXReading=random.uniform(xChange - abs(xChange * 0.25),xChange + abs(xChange * 0.25)), 
+            imuYReading=random.uniform(yChange - abs(yChange * 0.25),yChange + abs(yChange * 0.25)), imuAngleReading=(random.uniform(angleChange - abs(angleChange * 0.25),angleChange + abs(angleChange * 0.25))%360))
+
+    # Run PSO on simulated scans
+    startTime = time.time()
+    result = pso.runWithIterations(maxIterations=maxIter[0])
+    endTime = time.time()
+
+    # Measure metrics
+    runtime = endTime - startTime
+    #accuracy = np.linalg.norm(result - np.array([xChange, yChange, angleChange]))
+    xAccuracy = abs(result["x"] - xChange)
+    yAccuracy = abs(result["y"] - yChange)
+
+    # Calculate angle accuracy considering wrap-around at 360 degrees
+    angle_diff = (result["angle"] - angleChange) % 360
+    angleAccuracy = min(angle_diff, 360 - angle_diff)
+
+    xAccuracyPercent = abs(xAccuracy)/max(abs(xChange),1)
+    yAccuracyPercent = abs(yAccuracy)/max(abs(yChange),1)
+    angleAccuracyPercent = abs(angleAccuracy)/max(abs(angleChange),1)
+
+    print(f'''Single Run Results - Swarm Size: {swarmSize}, Max Iterations: {maxIter}, 
+          XChange: {xChange}, YChange: {yChange}, AngleChange: {angleChange}, 
+          W: {aW}, C1: {aC1}, C2: {aC2}, XY W: {xyW}, XY C1: {xyC1}, XY C2: {xyC2}, Section Count: {sectionCount}
+          Average Runtime: {runtime:.2f}s,
+          X Inaccuracy: {xAccuracy:.2f} ({(xAccuracyPercent*100):.2f}%), Y Inaccuracy: {yAccuracy:.2f} ({(yAccuracyPercent*100):.2f}%), Angle Inaccuracy: {angleAccuracy:.2f} ({(angleAccuracyPercent*100):.2f}%),
+          X: {result['x']:.2f}, Y: {result['y']:.2f}, Angle: {result['angle']:.2f},
+          Cost: {result['cost']:.2f}\n''')
+
+    bestCosts = result['best_costs']
+    avgCosts = result['avg_costs']
+
+    # Graphs showing best costs and average costs over iterations
+    plt.figure(figsize=(10, 5))
+    plt.plot(bestCosts, label='Best Costs')
+    plt.plot(avgCosts, label='Average Costs')
+    plt.title('Costs over Iterations')
+    plt.xlabel('Iteration')
+    plt.ylabel('Cost')
+    plt.legend()
+    plt.show()
+
+def write_grouped_data_to_files(grouped_param_set_data, out_dir='testing/grouped_results'):
+        os.makedirs(out_dir, exist_ok=True)
+
+        # Create a JSON summary of all groups (keys as string)
+        serializable = {}
+        for key, entries in grouped_param_set_data.items():
+            key_str = f"x{key[0]}_y{key[1]}_a{key[2]}"
+            serializable[key_str] = []
+            for entry in entries:
+                params, avgX, avgY, avgAngle, avgCost, avgRuntime = entry
+                serializable[key_str].append({
+                    "params": list(params),
+                    "avg_x_inacc": avgX,
+                    "avg_y_inacc": avgY,
+                    "avg_angle_inacc": avgAngle,
+                    "avg_cost": avgCost,
+                    "avg_runtime": avgRuntime
+                })
+
+        json_path = os.path.join(out_dir, "grouped_results.json")
+        with open(json_path, "w", encoding="utf-8") as jf:
+            json.dump(serializable, jf, indent=2)
+
+        # Write a CSV file per group for easy viewing
+        for key, entries in grouped_param_set_data.items():
+            filename = f"group_x{key[0]}_y{key[1]}_a{key[2]}.csv"
+            path = os.path.join(out_dir, filename)
+            with open(path, "w", newline="", encoding="utf-8") as cf:
+                writer = csv.writer(cf)
+                writer.writerow(["params", "avg_x_inacc", "avg_y_inacc", "avg_angle_inacc", "avg_cost", "avg_runtime"])
+                for entry in entries:
+                    params, avgX, avgY, avgAngle, avgCost, avgRuntime = entry
+                    writer.writerow([";".join(map(str, params)), avgX, avgY, avgAngle, avgCost, avgRuntime])
+
+        print(f"Grouped data written to: {out_dir}")
 
 # Test structure. Has been modified to allow optional passing of a second scan for comparison.
 def testPsoAlgorithm(xPositionChanges, 
@@ -125,8 +231,12 @@ def testPsoAlgorithm(xPositionChanges,
                      sectionCounts,
                      numRuns,
                      scan1,
-                     scan2 = None):
-
+                     scan2 = None,
+                     swarmSizeComparison = False):
+    
+    paramSetData = [] # List of tuples (params, avgXInaccuracy, avgYInaccuracy, avgAngleInaccuracy, avgCost, avgRuntime)
+    testStartTime = time.time()
+    
     for xChange in xPositionChanges:
         for yChange in yPositionChanges:
             for angleChange in angleChanges:
@@ -153,7 +263,7 @@ def testPsoAlgorithm(xPositionChanges,
                                                         # Initialize PSO with parameters
                                                         pso = PSO(swarmSize=swarmSize, w_xy=xyW, c1_xy=xyC1, c2_xy=xyC2,
                                                                 w_angle=aW, c1_angle=aC1, c2_angle=aC2, oldLidarScan=scan1,
-                                                                newLidarScan=adjustedScan, angleOffset=0, imuXReading=random.uniform(xChange - abs(xChange * 0.25),xChange + abs(xChange * 0.25)), 
+                                                                newLidarScan=adjustedScan, angleOffset=0, sections=sectionCount, imuXReading=random.uniform(xChange - abs(xChange * 0.25),xChange + abs(xChange * 0.25)), 
                                                                 imuYReading=random.uniform(yChange - abs(yChange * 0.25),yChange + abs(yChange * 0.25)), imuAngleReading=(random.uniform(angleChange - abs(angleChange * 0.25),angleChange + abs(angleChange * 0.25))%360))
 
                                                         # Run PSO on simulated scans
@@ -181,9 +291,68 @@ def testPsoAlgorithm(xPositionChanges,
 
                                                     # Gather and save metrics from run
                                                     ssInaccuracyResults.append((swarmSize, np.mean([acc[0] for acc in inaccuraciesPercentage]), np.mean([acc[1] for acc in inaccuraciesPercentage]), np.mean([acc[2] for acc in inaccuraciesPercentage]), np.mean(costs), np.mean(runtimes)))
-                                                #TODO: swarmsize comparison for this parameter set.
-                                                buildSwarmSizeGraphs(ssInaccuracyResults)
+                                                    paramSetData.append(((xChange, yChange, angleChange, maxIter, swarmSize, aW, aC1, aC2, xyW, xyC1, xyC2, sectionCount), np.mean([acc[0] for acc in inaccuraciesPercentage]), np.mean([acc[1] for acc in inaccuraciesPercentage]), np.mean([acc[2] for acc in inaccuraciesPercentage]), np.mean(costs), np.mean(runtimes)))
 
+                                                buildSwarmSizeGraphs(ssInaccuracyResults) if swarmSizeComparison else None
+    
+    # Split paramSetData into groups based on xChange, yChange and angleChange combinations. For example, all entries with (10,10,1) together.
+    groupedParamSetData = {}
+    for entry in paramSetData:
+        params = entry[0]
+        key = (params[0], params[1], params[2])  # (xChange, yChange, angleChange)
+        if key not in groupedParamSetData:
+            groupedParamSetData[key] = []
+        groupedParamSetData[key].append(entry)
+
+    # Write grouped data to file for possible future analysis and appendix data.
+    write_grouped_data_to_files(groupedParamSetData)
+
+    # For each group, print top 5 metrics
+    for key, group in groupedParamSetData.items():
+        print(f"\n------------------------------------------------------------------------\nResults for XChange: {key[0]}, YChange: {key[1]}, AngleChange: {key[2]}")
+        top5Metrics(group)
+
+    testEndTime = time.time()
+    print(f"\nTotal Testing Time: {(testEndTime - testStartTime)/60:.2f} minutes")
+# end def
+
+def top5Metrics(paramSetData):
+    # Process paramSetData to find best parameter set based on various metrics
+    # 1. Sort by lowest average total inaccuracy (sum of x, y, angle inaccuracies)
+    totalInaccuracySorted = sorted(paramSetData, key=lambda x: x[1] + x[2] + x[3])
+    print("\nTop 5 Parameter Sets by Lowest Total Inaccuracy (X + Y + Angle):")
+    for entry in totalInaccuracySorted[:5]: # Top 5
+        params, avgXInacc, avgYInacc, avgAngleInacc, avgCost, avgRuntime = entry
+        print(f'''Params: {params}
+            Avg X Inacc: {avgXInacc:.4f}, Avg Y Inacc: {avgYInacc:.4f}, Avg Angle Inacc: {avgAngleInacc:.4f}, 
+            Avg Total Inacc: {avgXInacc + avgYInacc + avgAngleInacc:.4f}, Avg Cost: {avgCost:.2f}, Avg Runtime: {avgRuntime:.2f}s''')
+        
+    # 2. Sort by lowest average cost
+    costSorted = sorted(paramSetData, key=lambda x: x[4])
+    print("\nTop 5 Parameter Sets by Lowest Average Cost:")
+    for entry in costSorted[:5]: # Top 5
+        params, avgXInacc, avgYInacc, avgAngleInacc, avgCost, avgRuntime = entry
+        print(f'''Params: {params}
+            Avg X Inacc: {avgXInacc:.4f}, Avg Y Inacc: {avgYInacc:.4f}, Avg Angle Inacc: {avgAngleInacc:.4f}, 
+            Avg Total Inacc: {avgXInacc + avgYInacc + avgAngleInacc:.4f}, Avg Cost: {avgCost:.2f}, Avg Runtime: {avgRuntime:.2f}s''')
+        
+    # 3. Sort by lowest average runtime
+    runtimeSorted = sorted(paramSetData, key=lambda x: x[5])
+    print("\nTop 5 Parameter Sets by Lowest Average Runtime:")
+    for entry in runtimeSorted[:5]: # Top 5
+        params, avgXInacc, avgYInacc, avgAngleInacc, avgCost, avgRuntime = entry
+        print(f'''Params: {params}
+            Avg X Inacc: {avgXInacc:.4f}, Avg Y Inacc: {avgYInacc:.4f}, Avg Angle Inacc: {avgAngleInacc:.4f}, 
+            Avg Total Inacc: {avgXInacc + avgYInacc + avgAngleInacc:.4f}, Avg Cost: {avgCost:.2f}, Avg Runtime: {avgRuntime:.2f}s''')
+        
+    # 4. Sort by best balance of accuracy and runtime (lowest total inaccuracy * avg runtime)
+    balanceSorted = sorted(paramSetData, key=lambda x: (x[1] + x[2] + x[3]) * x[5])
+    print("\nTop 5 Parameter Sets by Best Balance of Accuracy and Runtime (Total Inaccuracy * Avg Runtime):")
+    for entry in balanceSorted[:5]: # Top 5
+        params, avgXInacc, avgYInacc, avgAngleInacc, avgCost, avgRuntime = entry
+        print(f'''Params: {params}
+            Avg X Inacc: {avgXInacc:.4f}, Avg Y Inacc: {avgYInacc:.4f}, Avg Angle Inacc: {avgAngleInacc:.4f}, 
+            Avg Total Inacc: {avgXInacc + avgYInacc + avgAngleInacc:.4f}, Avg Cost: {avgCost:.2f}, Avg Runtime: {avgRuntime:.2f}s''')
 
 def main(configFile='testing/testPSO.conf'):
     # Load parameters and run the testing framework
@@ -215,6 +384,13 @@ def main(configFile='testing/testPSO.conf'):
     costTestParticle = testParticle.calcCost(scan1Adj, scan1[:, 1], scan1[:, 2], sections=180)
     #print("Cost of Test Particle against Adjusted (0, 10, 0) Scan 1:", costTestParticle)
     '''
+
+    runChoice = input("Run a single run test (y/N)? ")
+    if runChoice.lower() == 'y':
+        # Prompt for file containing parameters
+        paramFile = input("Enter the parameter file path (default ./testing/singlePSO.conf): ") or './testing/singlePSO.conf'
+        singleParams = importParametersFromConfig(configFile=paramFile)
+        testSingleRun(*singleParams, scan1=scan1)
 
     # Test 1: Stationary and adjusted position scans
     testPsoAlgorithm(xPositionChanges, yPositionChanges, angleChanges, swarmSizes, maxIterations, angleWVals, angleC1Vals, angleC2Vals, xyWVals, xyC1Vals, xyC2Vals, sectionCounts, numRuns=runs, scan1=scan1)
