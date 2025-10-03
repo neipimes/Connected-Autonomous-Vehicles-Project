@@ -113,9 +113,9 @@ class PSO:
 
             # Check for global best particle after all particles have been updated
             for particle in self.particles:
-                if self.global_best_particle is None or particle.cost < self.global_best_particle.cost:
-                    self.global_best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
-                    self.global_best_particle.cost = particle.cost
+                if self.best_particle is None or particle.cost < self.best_particle.cost:
+                    self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
+                    self.best_particle.cost = particle.cost
 
             lastIterTime = time.time() - iterationRunTime
 
