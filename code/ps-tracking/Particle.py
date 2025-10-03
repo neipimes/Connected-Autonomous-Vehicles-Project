@@ -37,6 +37,7 @@ class Particle:
         y_trans = y_robot - yChange
 
         # Rotate by -self.angle (to align with particle orientation)
+        angleChange = np.array(angleChange)
         theta = np.radians(-angleChange)
         cos_theta = np.cos(theta)
         sin_theta = np.sin(theta)
@@ -89,9 +90,21 @@ class Particle:
         expected_bins = np.digitize(expectedScan[:, 0], bin_edges) - 1
         new_bins = np.digitize(newLidarScan[:, 1], bin_edges) - 1
 
-        # Calculate mean distances for each bin using bincount courtesy of yanqing.liu@curtin.edu.au
-        expected_means = self.sector_mean_bincount(expectedScan[:, 1], expected_bins, sections)
-        new_means = self.sector_mean_bincount(newLidarScan[:, 2], new_bins, sections)
+        # Normalize angles to [0,360)
+        expected_angles = np.mod(expectedScan[:, 0], 360.0)
+        new_angles = np.mod(newLidarScan[:, 1], 360.0)
+
+        # Bin angles into sections (stable integer bin indices 0..sections-1)
+        bin_idx_expected = np.floor(expected_angles * sections / 360.0).astype(int)
+        bin_idx_new = np.floor(new_angles * sections / 360.0).astype(int)
+
+        # Clip indices to valid range to avoid sections or negative indices
+        bin_idx_expected = np.clip(bin_idx_expected, 0, sections - 1)
+        bin_idx_new = np.clip(bin_idx_new, 0, sections - 1)
+
+        # Calculate mean distances for each bin using bincount with fixed minlength
+        expected_means = self.sector_mean_bincount(expectedScan[:, 1], bin_idx_expected, sections)
+        new_means = self.sector_mean_bincount(newLidarScan[:, 2], bin_idx_new, sections)
 
         # Compute segment costs using absolute differences
         segmentCosts = np.abs(expected_means - new_means)
