@@ -45,10 +45,11 @@ class Motor:
                 self._logger.error(f"Invalid speed type: {type(speed)}. Must be float or int. Max 2 decimal places.")
                 return
 
-            speedModified = int(speed * 100) # Convert speed to a value between -10000 and 10000
+            #speedModified = int(speed * 100) # Convert speed to a value between -10000 and 10000
             if self.ser:
                 self.ser.flush()
-            command = f'S{speedModified}\n'
+            #command = f'S{speedModified}\n' Old command for finer control, but controller doesn't support it currently.
+            command = f'S{int(speed)}\n'
             self._logger.info(f"Setting motor speed to {speed}. Command: {command}")
             # Before we send a new speed command, we need to stop the motor first.
             self.motorStop()

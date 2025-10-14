@@ -2,7 +2,6 @@ import os
 from Particle import Particle
 import numpy as np
 import copy, time
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
 class PSO:
     def __init__(self, swarmSize: int, w_xy: float, c1_xy: float, c2_xy: float, w_angle: float, c1_angle: float, c2_angle: float,
@@ -40,19 +39,14 @@ class PSO:
         self.particles = []
         self.best_particle = None
 
-        # Parallelize particle initialization
-        with ProcessPoolExecutor(max_workers=int(os.cpu_count()/2)) as executor:
-            futures = [
-                executor.submit(self._initialize_particle, imuXReading, imuYReading, imuAngleReading, xNoise, yNoise, angleNoise)
-                for _ in range(self.swarmSize)
-            ]
-            for future in futures:
-                particle, cost = future.result()
-                self.particles.append(particle)
-                if self.best_particle is None or cost < self.best_particle.cost:
-                    # Create a new copy of the best particle and set its cost.
-                    self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
-                    self.best_particle.cost = cost
+        # Initialize particles sequentially
+        for _ in range(self.swarmSize):
+            particle, cost = self._initialize_particle(imuXReading, imuYReading, imuAngleReading, xNoise, yNoise, angleNoise)
+            self.particles.append(particle)
+            if self.best_particle is None or cost < self.best_particle.cost:
+                # Create a new copy of the best particle and set its cost.
+                self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
+                self.best_particle.cost = cost
 
         self.initTime = time.time() - self.trueStartTime
 
@@ -109,15 +103,20 @@ class PSO:
             iterationRunTime = time.time()
             iterCount += 1
 
-            # Parallelize particle updates and cost calculations
-            with ProcessPoolExecutor(max_workers=(os.cpu_count()/2)) as executor:
-                futures = {executor.submit(self._update_particle, particle): particle for particle in self.particles}
-                for future in as_completed(futures):
-                    particle, cost = future.result()
-                    if self.best_particle is None or cost < self.best_particle.cost:
-                        # Update the best particle in a thread-safe manner
-                        self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
-                        self.best_particle.cost = cost
+            # Update particles sequentially
+            for particle in self.particles:
+                particle, cost = self._update_particle(particle)
+                if self.best_particle is None or cost < self.best_particle.cost:
+                    # Update the best particle
+                    self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
+                    self.best_particle.cost = cost
+
+            '''
+            # Check for global best particle after all particles have been updated
+            for particle in self.particles:
+                if self.best_particle is None or particle.cost < self.best_particle.cost:
+                    self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
+                    self.best_particle.cost = particle.cost'''
 
             lastIterTime = time.time() - iterationRunTime
 
@@ -133,26 +132,29 @@ class PSO:
         startTime = time.time()
         iterCount = 0
 
-        costs = []
+        average_costs = []
+        best_costs = []
         iterRunTimes = []
 
         while iterCount < maxIterations:
             iterCount += 1
             iterationStartTime = time.time()
 
-            # Parallelize particle updates and cost calculations
-            with ProcessPoolExecutor(max_workers=int(os.cpu_count()/2)) as executor:
-                futures = {executor.submit(self._update_particle, particle): particle for particle in self.particles}
-                for future in as_completed(futures):
-                    particle, cost = future.result()
-                    if self.best_particle is None or cost < self.best_particle.cost:
-                        # Update the best particle in a thread-safe manner
-                        self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
-                        self.best_particle.cost = cost
+            iterCosts = []
+
+            # Update particles sequentially
+            for particle in self.particles:
+                particle, cost = self._update_particle(particle)
+                iterCosts.append(cost)
+                if self.best_particle is None or cost < self.best_particle.cost:
+                    # Update the best particle
+                    self.best_particle = Particle(copy.deepcopy(particle.x), copy.deepcopy(particle.y), copy.deepcopy(particle.angle))
+                    self.best_particle.cost = cost
 
             iterationRunTime = time.time() - iterationStartTime
             iterRunTimes.append(iterationRunTime)
-            costs.append(self.best_particle.cost)
+            best_costs.append(self.best_particle.cost)
+            average_costs.append(np.mean(iterCosts) if len(iterCosts) > 0 else 0)
 
         runTime = time.time() - startTime
         iterRunTimes = np.array(iterRunTimes)
@@ -160,6 +162,6 @@ class PSO:
 
         # Return the best particle's position, angle, cost and total time taken.
         return ({'x': self.best_particle.x, 'y': self.best_particle.y, 'angle': self.best_particle.angle,
-                'cost': self.best_particle.cost, 'totalTime': runTime,
+                'cost': self.best_particle.cost, 'best_costs': best_costs, 'avg_costs': average_costs, 'totalTime': runTime,
                 'trueTotalTime': time.time() - self.trueStartTime, 'initTime': self.initTime,
                 'avgIterTime': avgIterTime})

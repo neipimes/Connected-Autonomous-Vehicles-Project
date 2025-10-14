@@ -197,3 +197,7 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Additional project ignore rules
+code/ps-tracking/testing/
+code/ps-tracking/testing/expTestPSO.conf

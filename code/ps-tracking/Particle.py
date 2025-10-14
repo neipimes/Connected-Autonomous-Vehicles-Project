@@ -8,30 +8,37 @@ class Particle:
         self.angle = angle
         self.cost = float('inf')  # Initialize cost to infinity
 
-        self.xVelocity = np.random.uniform(-1, 1)
-        self.yVelocity = np.random.uniform(-1, 1)
-        self.angleVelocity = np.random.uniform(-0.1, 0.1)
+        self.xVelocity = np.random.uniform(-10, 10)
+        self.yVelocity = np.random.uniform(-10, 10)
+        self.angleVelocity = np.random.uniform(-0.05, 0.05)
 
         self.personalBest = (x, y, angle)
     
-    # Below are copilot generated functions that transform lidar scans to the particle frame using an explicit cartesian approach.
-    def calcEstLidarMeasurements(self, angles: np.ndarray, distances: np.ndarray):
+    @staticmethod
+    def shiftLidarScan(angles: np.ndarray, distances: np.ndarray, xChange: float, yChange: float, angleChange: float):
         """
-        Explicitly transform lidar scan points from the robot frame to the particle frame.
-        lidar_scan: Nx3 array [quality, angle (deg), distance]
-        Returns: Nx3 array [quality, angle (deg, in particle frame), distance (in particle frame)]
+        Shift the lidar scan by the given x, y, and angle changes.
+        angles: 1D array of angles in degrees
+        distances: 1D array of distances
+        xChange: change in x position
+        yChange: change in y position
+        angleChange: change in angle in degrees
+        Returns: shifted angles and distances as 1D arrays
         """
-
+        if len(angles) != len(distances):
+            raise ValueError("Angles and distances must have the same length.")
+        
         # Convert polar to Cartesian in robot frame
         x_robot = distances * np.sin(np.radians(angles)) # Sine and cosine are swapped here to match the polar lidar coordinate system.
         y_robot = distances * np.cos(np.radians(angles))
 
         # Transform to particle frame: translate by -self.x, -self.y
-        x_trans = x_robot - self.x
-        y_trans = y_robot - self.y
+        x_trans = x_robot - xChange
+        y_trans = y_robot - yChange
 
         # Rotate by -self.angle (to align with particle orientation)
-        theta = np.radians(-self.angle)
+        angleChange = np.array(angleChange)
+        theta = np.radians(-angleChange)
         cos_theta = np.cos(theta)
         sin_theta = np.sin(theta)
         x_part = cos_theta * x_trans - sin_theta * y_trans
@@ -39,10 +46,22 @@ class Particle:
 
         # Convert back to polar in particle frame
         distances_part = np.sqrt(x_part**2 + y_part**2)
-        angles_part = np.degrees(np.arctan2(y_part, x_part))
+        angles_part = np.degrees(np.arctan2(x_part, y_part))  # Swapped to match LiDAR coordinate system
         angles_part = np.mod(angles_part, 360)
 
+        return angles_part, distances_part
+
+    # Below are copilot generated functions that transform lidar scans to the particle frame using an explicit cartesian approach.
+    def calcEstLidarMeasurements(self, angles: np.ndarray, distances: np.ndarray):
+        """
+        Wrapper of Particle.shiftLidarScan.
+        angles: 1D array of angles in degrees
+        distances: 1D array of distances
+        Returns: Nx2 array [angle (deg, in particle frame), distance (in particle frame)]
+        """
+        angles_part, distances_part = Particle.shiftLidarScan(angles, distances, self.x, self.y, self.angle)
         return np.column_stack((angles_part, distances_part))
+
 
     def sector_mean_bincount(self, distances, bin_idx, sections: int):
         # Function used to calculate mean distances in each sector using numpy bincount. Written by yanqing.liu@curtin.edu.au
@@ -69,11 +88,23 @@ class Particle:
         # Optimized: Use numpy digitize to bin angles into sections for efficiency
         bin_edges = np.linspace(0, 360, sections + 1)
         expected_bins = np.digitize(expectedScan[:, 0], bin_edges) - 1
-        new_bins = np.digitize(newLidarScan[:, 0], bin_edges) - 1
+        new_bins = np.digitize(newLidarScan[:, 1], bin_edges) - 1
 
-        # Calculate mean distances for each bin using bincount courtesy of yanqing.liu@curtin.edu.au
-        expected_means = self.sector_mean_bincount(expectedScan[:, 1], expected_bins, sections)
-        new_means = self.sector_mean_bincount(newLidarScan[:, 1], new_bins, sections)
+        # Normalize angles to [0,360)
+        expected_angles = np.mod(expectedScan[:, 0], 360.0)
+        new_angles = np.mod(newLidarScan[:, 1], 360.0)
+
+        # Bin angles into sections (stable integer bin indices 0..sections-1)
+        bin_idx_expected = np.floor(expected_angles * sections / 360.0).astype(int)
+        bin_idx_new = np.floor(new_angles * sections / 360.0).astype(int)
+
+        # Clip indices to valid range to avoid sections or negative indices
+        bin_idx_expected = np.clip(bin_idx_expected, 0, sections - 1)
+        bin_idx_new = np.clip(bin_idx_new, 0, sections - 1)
+
+        # Calculate mean distances for each bin using bincount with fixed minlength
+        expected_means = self.sector_mean_bincount(expectedScan[:, 1], bin_idx_expected, sections)
+        new_means = self.sector_mean_bincount(newLidarScan[:, 2], bin_idx_new, sections)
 
         # Compute segment costs using absolute differences
         segmentCosts = np.abs(expected_means - new_means)

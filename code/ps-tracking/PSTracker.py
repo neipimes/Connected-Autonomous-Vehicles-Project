@@ -5,7 +5,7 @@ from imucontrol.imus import CAV_imus as imus
 #print(C_imus.__file__)
 #importlib.reload(C_imus)
 
-from PSO import PSO
+from PSO_Single_Core import PSO
 
 import numpy as np
 from rplidar import RPLidar
@@ -254,7 +254,7 @@ class PSTracker:
         This method runs in a separate thread or process to avoid blocking the main thread.
         """
         try:
-            scan_iterator = lidar.iter_scans(max_buf_meas=3000, scan_type='normal')
+            scan_iterator = lidar.iter_scans(max_buf_meas=3000)
 
             # Drop the first 5 scans to ensure stable data
             for _ in range(5):
