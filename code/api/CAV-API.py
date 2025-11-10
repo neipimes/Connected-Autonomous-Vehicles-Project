@@ -6,11 +6,22 @@ from imucontrol.imus import cav_imus
 from motorcontrol.Motor import motor
 from steeringControl.steeringControl import Steering
 from flask import Flask, jsonify, request
+import signal
 
 # Initialisations
 steering = Steering()
 motor.start()
 cav_imus.start()
+
+# Signal handling and cleanup
+def signal_handler(sig, frame):
+    print("Shutting down gracefully...")
+    motor.close()
+    steering.close()
+    exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # Flask setup and default route
 app = Flask(__name__)
