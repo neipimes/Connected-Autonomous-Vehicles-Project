@@ -32,6 +32,9 @@ class Motor:
             self.timeout = 1
             self.ser = None  # Serial object to communicate with onboard arduino
             self.initialized = True
+            self.motorSpeed = 0.0  
+            self.motorDirection = "STOP" 
+            self._logger.info("Motor instance initialized.")
 
     def setMotorSpeed(self, speed: float):
         # Set the motor speed. Speed should be between -100 and 100.
@@ -43,6 +46,7 @@ class Motor:
                 speed = float(speed)
             else:
                 self._logger.error(f"Invalid speed type: {type(speed)}. Must be float or int. Max 2 decimal places.")
+                raise ValueError("Invalid speed type. Must be float or int. Max 2 decimal places.")
                 return
 
             #speedModified = int(speed * 100) # Convert speed to a value between -10000 and 10000
@@ -66,19 +70,35 @@ class Motor:
                     time.sleep(0.5)  
                     self.ser.write(command.encode())
                     self.ser.flush()
+
+                self.motorSpeed = speed
+                if speed > 0:
+                    self.motorDirection = "FORWARD"
+                elif speed < 0:
+                    self.motorDirection = "REVERSE"
+                else:
+                    self.motorDirection = "STOP"
             
             else:
                 self._logger.error("Serial port is not open. Cannot send command.")
+                raise ConnectionError("Serial port is not open. Cannot send command.")
         else:
             self._logger.error(f"Invalid speed value of {speed}. Must be between -100 and 100.")
+            raise ValueError("Invalid speed value. Must be between -100 and 100.")
 
     def motorStop(self):
         # Stop the motor
         command = 'S0\n'
         self._logger.info("Stopping motor. Command: S0")
-        if self.ser:
+        if self.ser and self.ser.is_open:
             self.ser.write(command.encode())
             self.ser.flush()
+
+            self.motorSpeed = 0.0
+            self.motorDirection = "STOP"
+        else:
+            self._logger.error("Serial port is not open. Cannot send stop command.")
+            raise ConnectionError("Serial port is not open. Cannot send stop command.")
 
     def importConfig(self):
         # Import the motor configuration from a file located in ~/configs/motor.conf 
@@ -120,7 +140,7 @@ class Motor:
                 return True
             else:
                 self._logger.error(f"Error opening serial port: {e}")
-                return False
+                raise ConnectionError(f"Error opening serial port: {e}")
         return True
     
     def close(self):
@@ -131,7 +151,7 @@ class Motor:
             return True
         else:
             self._logger.warning("Serial port was not open or already closed.")
-            return False
+            raise ConnectionError("Serial port was not open or already closed.")
 
 # Singleton instance for external use
 motor = Motor()
