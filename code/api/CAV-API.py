@@ -1,6 +1,8 @@
 # API for interfacing with CAV functions
 # Author: James Crossley
 
+# TODO: IMU and LiDAR endpoints, alongside positional tracking data. Also need an authentication system implemented to prevent malicious use. Can be handled
+
 # Imports
 from imucontrol.imus import cav_imus
 from motorcontrol.Motor import motor
@@ -31,7 +33,7 @@ def home():
     return "CAV API is running."
     #return "CAV API is running.\n Login with POST request at /login with JSON {'username': 'your_username'} to grab clientID."
 
-# Motor calls
+# Motor calls --------------------------------------------------------------
 @app.route('/motor_status', methods=['GET'])
 def get_motor_status():
     # Returns current motor speed and direction
@@ -57,7 +59,8 @@ def set_motor_speed():
         except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 400
     
-# Steering calls
+
+# Steering calls -----------------------------------------------------------
 @app.route('/steering_angle', methods=['GET', 'POST'])
 def steering_angle():
     if request.method == 'GET':
@@ -73,3 +76,17 @@ def steering_angle():
             return jsonify({"status": "success", "message": f"Steering angle set to {angle}."})
         except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 400
+        
+
+# IMU calls --------------------------------------------------------------
+@app.route('/imu_data', methods=['GET'])
+def imu_data():
+    # Will return the latest averaged IMU data from cav_imus
+    return
+
+
+# LiDAR calls --------------------------------------------------------------
+@app.route('/lidar_data', methods=['GET'])
+def getLatestLidarScan():
+    # Will return the latest LiDAR scan data
+    return
